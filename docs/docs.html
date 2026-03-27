@@ -361,14 +361,7 @@ body {
 
 <!-- Sidebar -->
 <aside class="sidebar">
-  <ul class="sidebar-nav">
-    <li><a class="sidebar-link active" data-chapter="0"><i class="bi bi-box"></i><span>安装部署</span></a></li>
-    <li><a class="sidebar-link" data-chapter="1"><i class="bi bi-display"></i><span>管理面板使用</span></a></li>
-    <li><a class="sidebar-link" data-chapter="2"><i class="bi bi-exclamation-triangle"></i><span>注意事项</span></a></li>
-    <li><a class="sidebar-link" data-chapter="3"><i class="bi bi-question-circle"></i><span>常见问题</span></a></li>
-    <li><a class="sidebar-link" data-chapter="4"><i class="bi bi-file-text"></i><span>用户协议</span></a></li>
-    <li><a class="sidebar-link" data-chapter="5"><i class="bi bi-shield-check"></i><span>隐私政策</span></a></li>
-  </ul>
+  <ul class="sidebar-nav" id="sidebar-nav"></ul>
 </aside>
 
 <!-- Main Content -->
@@ -410,14 +403,7 @@ body {
   <div class="drawer-handle"></div>
   <div class="drawer-title">章节</div>
   <div class="drawer-body">
-    <ul class="sidebar-nav">
-      <li><a class="sidebar-link active" data-chapter="0"><i class="bi bi-box"></i><span>安装部署</span></a></li>
-      <li><a class="sidebar-link" data-chapter="1"><i class="bi bi-display"></i><span>管理面板使用</span></a></li>
-      <li><a class="sidebar-link" data-chapter="2"><i class="bi bi-exclamation-triangle"></i><span>注意事项</span></a></li>
-      <li><a class="sidebar-link" data-chapter="3"><i class="bi bi-question-circle"></i><span>常见问题</span></a></li>
-      <li><a class="sidebar-link" data-chapter="4"><i class="bi bi-file-text"></i><span>用户协议</span></a></li>
-      <li><a class="sidebar-link" data-chapter="5"><i class="bi bi-shield-check"></i><span>隐私政策</span></a></li>
-    </ul>
+    <ul class="sidebar-nav" id="drawer-chapters-nav"></ul>
   </div>
 </div>
 
@@ -436,24 +422,55 @@ body {
 let chapters = [];
 let currentChapter = 0;
 
-// ── URL 路由：用 ?c=0 参数标记章节 ──
+// 章节图标映射（新增章节在此添加即可）
+const CHAPTER_ICONS = {
+  '项目简介':    'bi-journal-text',
+  '安装部署':    'bi-box',
+  '管理面板使用': 'bi-display',
+  '注意事项':    'bi-exclamation-triangle',
+  '常见问题':    'bi-question-circle',
+  '用户协议':    'bi-file-text',
+  '隐私政策':    'bi-shield-check',
+};
+
+// ── 标题文本 → URL slug（保留中文/英文/数字，其余转连字符）──
+function slugify(text) {
+  return text
+    .replace(/[^\w\s\u4e00-\u9fa5]/g, ' ')
+    .trim().replace(/\s+/g, '-').toLowerCase()
+    .replace(/-+/g, '-').replace(/^-|-$/g, '');
+}
+function chapterSlug(i) { return slugify(chapters[i].title); }
+
+// ── URL 路由 ──
+// 旧版数字链接兼容映射（原始章节顺序，不含项目简介）
+const LEGACY = ['安装部署', '管理面板使用', '注意事项', '常见问题', '用户协议', '隐私政策'];
+
 function getChapterFromURL() {
-  const params = new URLSearchParams(window.location.search);
-  const c = parseInt(params.get('c'));
-  return isNaN(c) ? 0 : c;
+  const c = new URLSearchParams(window.location.search).get('c');
+  if (!c) return 0;
+  const bySlug = chapters.findIndex(ch => slugify(ch.title) === c);
+  if (bySlug >= 0) return bySlug;
+  // 兼容旧版数字索引
+  const n = parseInt(c);
+  if (!isNaN(n) && n >= 0 && n < LEGACY.length) {
+    const li = chapters.findIndex(ch => ch.title === LEGACY[n]);
+    if (li >= 0) return li;
+  }
+  return 0;
 }
 
 function setChapterInURL(index) {
   const url = new URL(window.location.href);
-  url.searchParams.set('c', index);
+  url.searchParams.set('c', chapterSlug(index));
+  url.hash = '';
   history.pushState({ chapter: index }, '', url.toString());
 }
 
-// 浏览器前进/后退
-window.addEventListener('popstate', (e) => {
+// ── 浏览器前进/后退 ──
+window.addEventListener('popstate', e => {
   const index = e.state?.chapter ?? getChapterFromURL();
   renderChapter(index, false);
-  // 如果 state 里有锚点则滚动过去
   const anchor = e.state?.anchor ?? window.location.hash.slice(1);
   if (anchor) {
     const target = document.getElementById(anchor);
@@ -463,141 +480,113 @@ window.addEventListener('popstate', (e) => {
 
 // ── 加载并解析 markdown ──
 fetch('docs.md')
-  .then(res => res.text())
+  .then(r => r.text())
   .then(markdown => {
-    const h2Regex = /^## (.+)$/gm;
-    const parts = markdown.split(h2Regex);
-    for (let i = 1; i < parts.length; i += 2) {
-      chapters.push({
-        title: parts[i].trim(),
-        content: '## ' + parts[i] + '\n\n' + (parts[i + 1] || '')
-      });
-    }
-    const initial = getChapterFromURL();
-    renderChapter(Math.min(initial, chapters.length - 1), false);
+    const parts = markdown.split(/^## (.+)$/gm);
+    for (let i = 1; i < parts.length; i += 2)
+      chapters.push({ title: parts[i].trim(), content: '## ' + parts[i] + '\n\n' + (parts[i + 1] || '') });
+    buildSidebar();
+    renderChapter(Math.min(getChapterFromURL(), chapters.length - 1), false);
   })
   .catch(() => {
-    document.getElementById('content').innerHTML =
-      '<p style="color:red;padding:2rem;">加载文档失败，请确保 docs.md 文件存在。</p>';
+    document.getElementById('content').innerHTML = '<p style="color:red;padding:2rem;">加载文档失败，请确保 docs.md 文件存在。</p>';
   });
+
+// ── 动态生成侧边栏（docs.md 新增章节自动出现）──
+function buildSidebar() {
+  const html = chapters.map((ch, i) =>
+    `<li><a class="sidebar-link" data-chapter="${i}"><i class="bi ${CHAPTER_ICONS[ch.title] || 'bi-file-earmark'}"></i><span>${ch.title}</span></a></li>`
+  ).join('');
+  document.getElementById('sidebar-nav').innerHTML = html;
+  document.getElementById('drawer-chapters-nav').innerHTML = html;
+  document.querySelectorAll('.sidebar-link').forEach(link =>
+    link.addEventListener('click', () => renderChapter(parseInt(link.dataset.chapter)))
+  );
+}
 
 // ── 渲染章节 ──
 function renderChapter(index, pushState = true) {
   if (index < 0 || index >= chapters.length) return;
   currentChapter = index;
-
-  const html = marked.parse(chapters[index].content);
-  document.getElementById('content').innerHTML = html;
-
-  document.querySelectorAll('pre code').forEach(block => hljs.highlightElement(block));
-
-  // 图片点击灯箱
-  document.querySelectorAll('#content img').forEach(img => {
-    img.addEventListener('click', () => openLightbox(img.src, img.alt));
-  });
-
-  // 同步更新桌面侧边栏 + 移动端抽屉的章节高亮
-  document.querySelectorAll('.sidebar-link').forEach((link) => {
-    link.classList.toggle('active', parseInt(link.dataset.chapter) === index);
-  });
-
+  document.getElementById('content').innerHTML = marked.parse(chapters[index].content);
+  document.querySelectorAll('pre code').forEach(b => hljs.highlightElement(b));
+  document.querySelectorAll('#content img').forEach(img =>
+    img.addEventListener('click', () => openLightbox(img.src, img.alt))
+  );
+  document.querySelectorAll('.sidebar-link').forEach(link =>
+    link.classList.toggle('active', parseInt(link.dataset.chapter) === index)
+  );
+  // 切换章节时先清 hash 再构建目录，防止 buildTOC 误用旧锚点滚动
+  if (pushState) setChapterInURL(index);
   buildTOC();
   window.scrollTo(0, 0);
   closeDrawers();
-
-  if (pushState) setChapterInURL(index);
-
-  // 清掉旧的小节 hash，避免 buildTOC 误触发锚点滚动
-  if (window.location.hash) {
+  // 初次加载/popstate：buildTOC 已处理 hash，用完后清掉
+  if (!pushState && window.location.hash) {
     const url = new URL(window.location.href);
     url.hash = '';
     history.replaceState({ chapter: index }, '', url.toString());
   }
 }
 
-// ── 构建右侧目录 ──
+// ── 构建右侧目录（用标题文本 slug 作为稳定锚点）──
 function buildTOC() {
   const headings   = document.querySelectorAll('#content h3, #content h4');
   const tocList    = document.getElementById('toc');
   const drawerList = document.getElementById('drawer-toc-list');
-  tocList.innerHTML    = '';
-  drawerList.innerHTML = '';
+  tocList.innerHTML = drawerList.innerHTML = '';
 
-  headings.forEach((heading, i) => {
-    const id        = 'h-' + i;
-    heading.id      = id;
-    const isH4      = heading.tagName === 'H4';
-    const shareHref = '?c=' + currentChapter + '#' + id;
+  const seen = {};
+  headings.forEach(h => {
+    const base = slugify(h.textContent);
+    const n    = seen[base] || 0;
+    const id   = n === 0 ? base : base + '-' + n;
+    seen[base] = n + 1;
+    h.id = id;
 
-    // 桌面端右侧目录
-    const li = document.createElement('li');
-    const a  = document.createElement('a');
-    a.href      = shareHref;
-    a.className = 'toc-link' + (isH4 ? ' level-4' : '');
-    a.textContent = heading.textContent;
-    a.onclick = (e) => {
+    const isH4 = h.tagName === 'H4';
+    const href  = '?c=' + chapterSlug(currentChapter) + '#' + id;
+    const cls   = isH4 ? ' level-4' : '';
+
+    const mkLink = (extraCls, onclickFn) => {
+      const a = document.createElement('a');
+      a.href = href; a.className = extraCls; a.textContent = h.textContent;
+      a.onclick = onclickFn;
+      return a;
+    };
+
+    const pushAnchor = e => {
       e.preventDefault();
       const url = new URL(window.location.href);
-      url.searchParams.set('c', currentChapter);
+      url.searchParams.set('c', chapterSlug(currentChapter));
       url.hash = id;
       history.pushState({ chapter: currentChapter, anchor: id }, '', url.toString());
-      scrollToHeading(heading);
     };
-    li.appendChild(a);
+
+    const li = document.createElement('li');
+    li.appendChild(mkLink('toc-link' + cls, e => { pushAnchor(e); scrollToHeading(h); }));
     tocList.appendChild(li);
 
-    // 移动端抽屉目录
     const dli = document.createElement('li');
-    const da  = document.createElement('a');
-    da.href      = shareHref;
-    da.className = 'drawer-toc-link' + (isH4 ? ' level-4' : '');
-    da.textContent = heading.textContent;
-    da.onclick = (e) => {
-      e.preventDefault();
-      const url = new URL(window.location.href);
-      url.searchParams.set('c', currentChapter);
-      url.hash = id;
-      history.pushState({ chapter: currentChapter, anchor: id }, '', url.toString());
-      closeDrawers();
-      scrollToHeading(heading);
-    };
-    dli.appendChild(da);
+    dli.appendChild(mkLink('drawer-toc-link' + cls, e => { pushAnchor(e); closeDrawers(); scrollToHeading(h); }));
     drawerList.appendChild(dli);
   });
 
-  // 初次加载带锚点时滚动到对应位置
   const hash = window.location.hash.slice(1);
-  if (hash) {
-    const target = document.getElementById(hash);
-    if (target) setTimeout(() => scrollToHeading(target), 80);
-  }
+  if (hash) { const t = document.getElementById(hash); if (t) setTimeout(() => scrollToHeading(t), 80); }
 }
 
-// 精确滚动：标题顶部对齐到导航栏底部
 function scrollToHeading(el) {
   const navH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--nav-h')) || 56;
-  const top = el.getBoundingClientRect().top + window.scrollY - navH - 16;
-  window.scrollTo({ top, behavior: 'smooth' });
+  window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - navH - 16, behavior: 'smooth' });
 }
 
-// ── 侧边栏 / 抽屉章节点击 ──
-// 用 data-chapter 属性取章节序号，避免 DOM 顺序干扰
-document.querySelectorAll('.sidebar-link').forEach((link) => {
-  link.addEventListener('click', () => {
-    const index = parseInt(link.dataset.chapter);
-    renderChapter(index);
-  });
-});
-
 // ── 抽屉控制 ──
-const overlay       = document.getElementById('drawer-overlay');
+const overlay        = document.getElementById('drawer-overlay');
 const drawerChapters = document.getElementById('drawer-chapters');
 const drawerToc      = document.getElementById('drawer-toc');
 
-function openDrawer(drawer) {
-  overlay.classList.add('show');
-  drawer.classList.add('show');
-}
+function openDrawer(d) { overlay.classList.add('show'); d.classList.add('show'); }
 function closeDrawers() {
   overlay.classList.remove('show');
   drawerChapters.classList.remove('show');
@@ -608,60 +597,41 @@ function closeDrawers() {
 
 document.getElementById('btn-chapters').addEventListener('click', () => {
   if (drawerChapters.classList.contains('show')) { closeDrawers(); return; }
-  closeDrawers();
-  openDrawer(drawerChapters);
+  closeDrawers(); openDrawer(drawerChapters);
   document.getElementById('btn-chapters').classList.add('active');
 });
-
 document.getElementById('btn-toc').addEventListener('click', () => {
   if (drawerToc.classList.contains('show')) { closeDrawers(); return; }
-  closeDrawers();
-  openDrawer(drawerToc);
+  closeDrawers(); openDrawer(drawerToc);
   document.getElementById('btn-toc').classList.add('active');
 });
-
 overlay.addEventListener('click', closeDrawers);
 
 // ── Scroll spy ──
 let ticking = false;
 window.addEventListener('scroll', () => {
-  if (!ticking) {
-    window.requestAnimationFrame(() => { updateTOCActive(); ticking = false; });
-    ticking = true;
-  }
+  if (!ticking) { window.requestAnimationFrame(() => { updateTOCActive(); ticking = false; }); ticking = true; }
 });
-
 function updateTOCActive() {
-  const headings = document.querySelectorAll('#content h3, #content h4');
-  const tocLinks = document.querySelectorAll('.toc-link');
-  let activeIndex = -1;
-  headings.forEach((h, i) => { if (h.getBoundingClientRect().top <= 100) activeIndex = i; });
-  tocLinks.forEach((l, i) => l.classList.toggle('active', i === activeIndex));
+  const hs = document.querySelectorAll('#content h3, #content h4');
+  const ls = document.querySelectorAll('.toc-link');
+  let ai = -1;
+  hs.forEach((h, i) => { if (h.getBoundingClientRect().top <= 100) ai = i; });
+  ls.forEach((l, i) => l.classList.toggle('active', i === ai));
 }
 
 // ── 灯箱 ──
-const lightbox     = document.getElementById('lightbox');
-const lightboxImg  = document.getElementById('lightbox-img');
-
-function openLightbox(src, alt) {
-  lightboxImg.src = src;
-  lightboxImg.alt = alt || '';
-  lightbox.classList.add('show');
-  document.body.style.overflow = 'hidden';
-}
-function closeLightbox() {
-  lightbox.classList.remove('show');
-  document.body.style.overflow = '';
-}
-
+const lightbox    = document.getElementById('lightbox');
+const lightboxImg = document.getElementById('lightbox-img');
+function openLightbox(src, alt) { lightboxImg.src = src; lightboxImg.alt = alt || ''; lightbox.classList.add('show'); document.body.style.overflow = 'hidden'; }
+function closeLightbox() { lightbox.classList.remove('show'); document.body.style.overflow = ''; }
 lightbox.addEventListener('click', closeLightbox);
 lightboxImg.addEventListener('click', e => e.stopPropagation());
 document.getElementById('lightbox-close').addEventListener('click', closeLightbox);
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
 
 fetch('version.json').then(r => r.json()).then(d => {
-  const el = document.getElementById('nav-version');
-  if (el) el.textContent = d.version || '';
+  const el = document.getElementById('nav-version'); if (el) el.textContent = d.version || '';
 }).catch(() => {});
 </script>
 

@@ -1,6 +1,6 @@
 # 🤖 Siver WX机器人 (wxbot_plus)
 
-[![Version](https://img.shields.io/badge/version-V4.6.1-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
+[![Version](https://img.shields.io/badge/version-V4.6.2-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
 [![Python](https://img.shields.io/badge/python-3.8+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE)
 
@@ -12,6 +12,13 @@
 
 ---
 
+## 项目简介
+开源：https://github.com/SiverKing/SiverWXbot_plus/
+
+一个功能完整、架构清晰的WX机器人框架，支持多 AI 平台接入、对话记忆、灵活的监听模式、丰富的管理命令和智能的消息处理流程。
+
+本项目为基于`wxautox4`py库为内核，搭建并封装了实体功能的[开源](https://github.com/SiverKing/SiverWXbot_plus/)项目。可直接使用源码或exe快速部署，也可二次修改使用。本项目为开源项目，全部源代码免费开放不收取任何费用，仅供交流学习使用。wxautox4收费为内核库设备授权需要收费。若您拥有内核库授权，不仅可免费使用本项目，还可以自行开发或者使用其他基于内核库的项目。获取授权可查看README或者下方[安装部署](https://wxbot.siverking.online/docs.html?c=安装部署)内查看。当前有试用可获取，数量有限，先到先得。
+
 ## 安装部署
 
 有两种方式可以运行本项目，**推荐新手选择方法一**。
@@ -20,7 +27,7 @@
 
 **环境要求：**
 - Windows 操作系统
-- Windows wx PC 版（`4.1.7` - `4.1.8.28` 版本）
+- Windows wx PC 版（`4.1.7` ~ `4.1.8.67` 版本）
 
 **下载地址（二选一）：**
 
@@ -37,8 +44,8 @@
 **环境要求：**
 - Python `3.8` - `3.12`
 - Windows 操作系统
-- Windows wx PC 版（`4.1.7` - `4.1.8.28` 版本）
-- wxautox4 授权（需购买，购买地址：https://www.siverking.online/static/img/siver_wx.jpg ）
+- Windows wx PC 版（`4.1.7` ~ `4.1.8.67` 版本）
+- wxautox4内核库 设备授权（需购买，购买地址：https://www.siverking.online/static/img/siver_wx.jpg ）
 
 **安装步骤：**
 
@@ -48,12 +55,12 @@ git clone https://github.com/SiverKing/SiverWXbot_plus.git
 cd wxbot_plus
 ```
 
-2. **安装依赖**
+1. **安装依赖**
 ```bash
 pip install -r requirements.txt
 ```
 
-3. **启动机器人**
+1. **启动机器人**
 ```bash
 python web_server.py
 ```
@@ -138,7 +145,7 @@ python web_server.py
 
 程序接管wx运行时，请勿手动干预，避免影响自动化操作。尽量减少操作电脑的次数，最好不要去手动操作wx
 
-1. 登录你的 Windows wx，注意版本要求与[安装部署](https://wxbot.siverking.online/docs.html?c=0)内说的环境要求一致。
+1. 登录你的 Windows wx，注意版本要求与[安装部署](https://wxbot.siverking.online/docs.html?c=安装部署)内说的环境要求一致。
 
 2. 保持 wx **主窗口开着**，不要打开 wx 的其他窗口，也不要最小化 wx。然后回到面板点击上方的 `启动机器人`，等待程序启动。
 
@@ -318,11 +325,11 @@ python web_server.py
 
 ### Q: 其他AI/SDK接口如何接入？
 
-**A:** 参照[注意事项](https://wxbot.siverking.online/docs.html?c=2)或者查看[源码](https://github.com/SiverKing/SiverWXbot_plus/)。
+**A:** 参照[注意事项](https://wxbot.siverking.online/docs.html?c=注意事项)或者查看[源码](https://github.com/SiverKing/SiverWXbot_plus/)。
 
 ### Q: 有没有数据安全，微信隐私问题？
 
-**A:** 参照[隐私政策](https://wxbot.siverking.online/docs.html?c=5)。
+**A:** 参照[隐私政策](https://wxbot.siverking.online/docs.html?c=隐私政策)。
 
 ### Q: 配置了DusAPI不能用？
 
@@ -350,7 +357,11 @@ python web_server.py
 
 ### Q: 我想自己开发/更改？ 
 
-**A:** 完全可以，代码完全开源。只要拥有wxautox4，自行拉取修改即可。
+**A:** 完全可以，代码完全开源。只要拥有wxautox4内核库设备授权，自行拉取源码修改即可。或者自行基于wxautox4内核库开发别的项目
+
+### Q: 如何更新？ 
+
+**A:** 拉取最新的源码或者下载最新的exe，放到你旧版本的运行目录里替换或者直接使用即可。或者将旧运行目录的`config/` `memory/`文件夹备份，然后放在新的运行目录即可调用旧数据。更新前建议您旧备份运行目录`config/` `memory/`文件夹，避免数据丢失。
 
 ---
 
