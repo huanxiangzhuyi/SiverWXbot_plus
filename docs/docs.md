@@ -1,6 +1,6 @@
 # 🤖 Siver WX机器人 (wxbot_plus)
 
-[![Version](https://img.shields.io/badge/version-V4.6.4-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
+[![Version](https://img.shields.io/badge/version-V4.6.5-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
 [![Python](https://img.shields.io/badge/python-3.8+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE)
 
@@ -195,6 +195,8 @@ python web_server.py
 | 欢迎消息 | 设置欢迎消息内容 |
 | +添加群组 | 添加要监听的群组名称。若有群组备注名则采用备注名；若有同名群组，则给其中一个群组在 wx 中设置备注后，再添加备注名 |
 
+可以为每个群组设置不同的AI接口调用方便同时处理监听和完成不同功能。
+
 ---
 
 ### 好友管理
@@ -231,6 +233,18 @@ python web_server.py
 
 ---
 
+### 朋友圈
+
+#### 随机朋友圈点赞
+
+设置后会在规定的随机时间内打开朋友圈并点赞第一条，用于活跃账号。
+
+#### 定时朋友圈
+
+参照页面内容配置定时朋友圈即可。若机器人运行着，达到定时时间时，就会触发定时朋友圈任务并自动发布朋友圈。
+
+---
+
 ### 定时启停
 
 选择并配置是否定时开启机器人和关闭机器人。
@@ -252,6 +266,12 @@ python web_server.py
 
 ![记忆管理](./img/14.png)
 ![记忆查看](./img/15.png)
+
+---
+
+### 其他配置
+
+可配置模拟人工操作延时功能。配置好后发送消息前会进行随机等待以模拟人工。
 
 ---
 

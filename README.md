@@ -1,6 +1,6 @@
 # 🤖 Siver WX机器人 (wxbot_plus)
 
-[![Version](https://img.shields.io/badge/version-V4.6.4-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
+[![Version](https://img.shields.io/badge/version-V4.6.5-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
 [![Python](https://img.shields.io/badge/python-3.8+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE)
 
@@ -47,6 +47,7 @@
 - **@ 回复模式** - 支持仅被 @ 时才回复
 - **群关键词回复** - 不受 @ 限制的关键词回复
 - **欢迎概率配置** - 可设置欢迎语触发概率
+- **群组专属 AI 接口（新）** - 每个监听群聊可单独绑定不同的 AI 接口，实现一个面板同时管理多个群、调用不同模型，互不影响；未绑定的群自动使用全局默认接口
 
 ### 🤝 新好友管理
 - **自动通过好友请求** - 批量处理新好友申请
@@ -64,6 +65,25 @@
 - **支持发送图片** - 消息内容填写图片绝对路径即可自动发送图片
 - **独立开关** - 每条定时任务可单独启用/禁用
 - **定时启停** - 设置机器人每日自动启动和停止时间
+
+### 🌸 朋友圈功能（新）
+
+#### 随机点赞（活跃账号）
+- **自动随机点赞** - 在设定的随机时间间隔内自动打开朋友圈，对当前第一条朋友圈点赞后关闭
+- **灵活间隔配置** - 最小 1 分钟、最大 1440 分钟（24 小时），每次执行后重新随机生成下一次间隔
+- **拟人化操作** - 每个动作之间有 1~5 秒随机延时，模拟真实用户行为
+- **默认关闭** - 需手动在面板开启，不影响原有功能
+
+#### 定时发送朋友圈
+- **全自动定时发圈** - 与定时消息完全相同的时间控制自由度（每天/每周/每月/单次/自定义日期）
+- **图文混发** - 支持纯文字、纯图片（最多9张）、图文混合，文字内容支持换行
+- **三级隐私控制** - 公开 / 白名单（仅标签内的人可见）/ 黑名单（屏蔽标签内的人）
+- **独立开关** - 每条任务可单独启用/禁用
+- **间隔延时** - 打开朋友圈 → 随机延时 2~5s → 发布 → 随机延时 2~5s → 关闭，拟人化操作
+
+### 📂 图片路径快速选择（新）
+- 新好友打招呼消息、定时消息内容、定时朋友圈图片三处均支持 **📁 选择图片** 按钮
+- 点击后弹出系统原生文件选择框，选中图片后自动将完整本地路径填入输入框，无需手动输入路径
 
 ### 🛠️ 管理命令系统
 通过WX消息发送命令，实时管理机器人：
@@ -161,6 +181,10 @@ python web_server.py
     "AllListen_switch": false,
     "listen_list": ["用户1", "用户2"],
     "group": ["群聊1", "群聊2"],
+    "group_api_map": {
+        "群聊1": 0,
+        "群聊2": 1
+    },
     "group_switch": true,
     "group_reply_at": true,
     "group_welcome": true,
@@ -188,6 +212,24 @@ python web_server.py
             "msgs": ["早安！", "C:\\图片\\morning.png"]
         }
     ],
+    "scheduled_moments_switch": false,
+    "scheduled_moments_list": [
+        {
+            "id": "xyz456",
+            "enabled": true,
+            "time": "10:00",
+            "repeat_type": "daily",
+            "weekdays": [],
+            "dates": [],
+            "text": "今天天气真好，适合出去走走～",
+            "images": ["C:\\图片\\1.png", "C:\\图片\\2.png"],
+            "privacy": "public",
+            "tags": []
+        }
+    ],
+    "moments_like_switch": false,
+    "moments_like_min": 60,
+    "moments_like_max": 120,
     "everyday_start_stop_bot_switch": false,
     "everyday_start_bot_time": "08:00",
     "everyday_stop_bot_time": "23:00",
@@ -211,6 +253,7 @@ python web_server.py
 | `AllListen_switch` | boolean | `false` | `false`=白名单模式，`true`=黑名单模式 |
 | `listen_list` | array | `[]` | 白名单/黑名单用户列表 |
 | `group` | array | `[]` | 监听的群聊列表 |
+| `group_api_map` | object | `{}` | 群组专属 AI 接口映射，格式 `{"群名": 接口索引}`，索引对应 `api_configs` 数组（0-based）；未配置的群使用 `api_index` 指定的默认接口 |
 | `group_switch` | boolean | `false` | 群机器人总开关 |
 | `group_reply_at` | boolean | `false` | 是否仅在被 @ 时回复群消息 |
 | `group_welcome` | boolean | `false` | 是否开启群新人欢迎语 |
@@ -223,7 +266,12 @@ python web_server.py
 | `group_keyword_switch` | boolean | `false` | 是否开启群聊关键词回复 |
 | `keyword_dict` | object | `{}` | 关键词→回复内容映射 |
 | `scheduled_msg_switch` | boolean | `false` | 是否开启定时消息 |
-| `scheduled_msg_list` | array | `[]` | 定时任务列表，详见下方说明 |
+| `scheduled_msg_list` | array | `[]` | 定时消息任务列表，详见下方说明 |
+| `scheduled_moments_switch` | boolean | `false` | 是否开启定时朋友圈 |
+| `scheduled_moments_list` | array | `[]` | 定时朋友圈任务列表，详见下方说明 |
+| `moments_like_switch` | boolean | `false` | 是否开启随机朋友圈点赞（默认关闭） |
+| `moments_like_min` | integer | `60` | 随机点赞最小间隔（分钟，1~1440） |
+| `moments_like_max` | integer | `120` | 随机点赞最大间隔（分钟，≥min，最大 1440 = 24 小时） |
 | `everyday_start_stop_bot_switch` | boolean | `false` | 是否开启每日定时启停机器人 |
 | `everyday_start_bot_time` | string | `"08:00"` | 每日自动启动时间（格式 `HH:MM`） |
 | `everyday_stop_bot_time` | string | `"23:00"` | 每日自动停止时间（格式 `HH:MM`） |
@@ -248,6 +296,25 @@ python web_server.py
 | `weekdays` | array | `weekly` 时使用，填写星期几（1=周一…7=周日） |
 | `dates` | array | `monthly` 时填每月几号；`once`/`custom` 时填日期字符串（如 `"2026-03-20"`） |
 | `msgs` | array | 消息内容列表，支持**文字**或**图片绝对路径**（自动识别） |
+
+### 定时朋友圈任务（scheduled_moments_list）字段说明
+
+每个定时朋友圈任务对象包含以下字段：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | string | 任务唯一 ID（自动生成） |
+| `enabled` | boolean | 是否启用该任务 |
+| `time` | string | 发布时间，格式 `HH:MM` |
+| `repeat_type` | string | 重复类型：`once`/`daily`/`weekly`/`monthly`/`custom`（同定时消息） |
+| `weekdays` | array | `weekly` 时使用，填写星期几（1=周一…7=周日） |
+| `dates` | array | `monthly` 时填每月几号；`once`/`custom` 时填日期字符串（如 `"2026-03-20"`） |
+| `text` | string | 朋友圈文字内容，支持换行，可为空（但文字和图片至少有一项） |
+| `images` | array | 本地图片绝对路径列表，最多 **9 张**，可为空 |
+| `privacy` | string | 隐私设置：`public`=公开 / `whitelist`=白名单 / `blacklist`=黑名单 |
+| `tags` | array | 隐私标签列表，`privacy` 非 `public` 时生效；**白名单**=仅这些标签的人可见；**黑名单**=屏蔽这些标签的人 |
+
+> **注意**：需要在手机端确认微信朋友圈功能已开启，否则 `wx.Moments()` 返回 `None` 并跳过发送。
 
 ### admin.json 账密文件
 

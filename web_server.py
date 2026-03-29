@@ -206,12 +206,18 @@ def dashboard():
     config.setdefault('api_index', 0)
 
     # —— 新增字段默认值（关键）——
+    config.setdefault('group_api_map', {})                   # 群组专属接口映射
     config.setdefault('group_welcome_random', 1.0)          # 新人欢迎概率
     config.setdefault('chat_keyword_switch', False)          # 私聊关键词开关
     config.setdefault('group_keyword_switch', False)         # 群组关键词开关
     config.setdefault('keyword_dict', {})                    # 关键词字典
     config.setdefault('scheduled_msg_switch', config.get('everyday_msg_switch', False))  # 定时消息开关
     config.setdefault('scheduled_msg_list', [])              # 定时消息任务列表
+    config.setdefault('scheduled_moments_switch', False)     # 定时朋友圈开关
+    config.setdefault('scheduled_moments_list', [])          # 定时朋友圈任务列表
+    config.setdefault('moments_like_switch', False)          # 随机朋友圈点赞开关
+    config.setdefault('moments_like_min', 60)                # 随机点赞最小间隔（分钟）
+    config.setdefault('moments_like_max', 120)               # 随机点赞最大间隔（分钟）
     # 旧配置迁移：everyday_msg_dict -> scheduled_msg_list
     if not config.get('scheduled_msg_list') and config.get('everyday_msg_dict'):
         import uuid
@@ -272,6 +278,8 @@ def _coerce_bool_fields(merged_config):
         'chat_keyword_switch',
         'group_keyword_switch',
         'scheduled_msg_switch',
+        'scheduled_moments_switch',         # 定时朋友圈开关
+        'moments_like_switch',              # 随机朋友圈点赞开关
         'everyday_start_stop_bot_switch',   # 新增
         'memory_switch',                    # 记忆开关
         'reply_delay_switch',               # 发送延迟开关
@@ -285,7 +293,7 @@ def _coerce_bool_fields(merged_config):
                 merged_config[field] = bool(v)
 
 def _coerce_list_fields(merged_config):
-    list_fields = ['listen_list', 'group', 'new_friend_msg', 'scheduled_msg_list']
+    list_fields = ['listen_list', 'group', 'new_friend_msg', 'scheduled_msg_list', 'scheduled_moments_list']
     for field in list_fields:
         if field in merged_config and not isinstance(merged_config[field], list):
             if isinstance(merged_config[field], str):
@@ -333,6 +341,23 @@ def _coerce_dict_fields(merged_config):
             return
         # 其他情况回退空 dict
         merged_config['keyword_dict'] = {}
+
+    # group_api_map: 值必须为 int 接口索引，非法值自动过滤
+    if 'group_api_map' in merged_config:
+        gam = merged_config['group_api_map']
+        if isinstance(gam, dict):
+            clean = {}
+            for k, v in gam.items():
+                k = str(k).strip()
+                try:
+                    vi = int(v)
+                    if k and vi >= 0:
+                        clean[k] = vi
+                except (ValueError, TypeError):
+                    pass
+            merged_config['group_api_map'] = clean
+        else:
+            merged_config['group_api_map'] = {}
 
 # 保存配置文件
 def save_config(config_data):
@@ -605,6 +630,43 @@ def save_email_config():
         return jsonify({'status': 'error', 'message': str(e)})
 
 import shutil
+import threading
+
+_tk_lock = threading.Lock()  # 确保同一时刻只弹一个文件选择框
+
+@app.route('/pick_image_file', methods=['GET'])
+@login_required
+def pick_image_file():
+    """
+    打开 Windows 原生文件选择对话框，让用户选择一张本地图片，
+    返回其绝对路径。前端直接将路径填入输入框，无需上传文件。
+    """
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+        path = ''
+        with _tk_lock:
+            root = tk.Tk()
+            root.withdraw()                  # 隐藏 tk 主窗口
+            root.attributes('-topmost', True)
+            root.lift()
+            path = filedialog.askopenfilename(
+                parent=root,
+                title='选择图片文件',
+                filetypes=[
+                    ('图片文件', '*.png *.jpg *.jpeg *.gif *.bmp *.webp *.PNG *.JPG *.JPEG'),
+                    ('所有文件', '*.*'),
+                ]
+            )
+            root.destroy()
+        if path:
+            import os
+            path = os.path.normpath(path)    # 统一为 Windows 反斜杠路径
+            return jsonify({'status': 'success', 'path': path})
+        return jsonify({'status': 'cancel'})
+    except Exception as e:
+        log('ERROR', f'文件选择框出错: {e}')
+        return jsonify({'status': 'error', 'message': str(e)})
 
 MEMORY_BASE = os.path.join(base_dir(), 'memory')
 
@@ -784,6 +846,7 @@ def main():
                 "AllListen_switch": False,
                 "listen_list": [],
                 "group": [],
+                "group_api_map": {},
                 "group_switch": False,
                 "group_reply_at": False,
                 "group_welcome": False,
@@ -797,6 +860,8 @@ def main():
                 "keyword_dict": {},
                 "scheduled_msg_switch": False,
                 "scheduled_msg_list": [],
+                "scheduled_moments_switch": False,
+                "scheduled_moments_list": [],
                 "everyday_start_stop_bot_switch": False,
                 "everyday_start_bot_time": "08:00",
                 "everyday_stop_bot_time": "23:00",

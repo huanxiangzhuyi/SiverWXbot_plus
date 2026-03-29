@@ -2,8 +2,8 @@
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox4版本
 # 作者：https://www.siver.top
 
-version = "V4.6.4"
-version_log = "重要修复！重要更新！强烈建议所有用户更新！！V4.6.4 - 修复无法调用dusapi claude模型的bug"
+version = "V4.6.5"
+version_log = "重要修复！重要更新！强烈建议所有用户更新！！V4.6.5 - 新增定时朋友圈功能、新增随机点赞朋友圈功能、新增每个监听群组可自由选择AI回复接口、新增面板可输入图片路径的地方支持直接选择文件、bug修复"
 
 # ============================================================
 # 标准库导入
@@ -105,6 +105,7 @@ class WXBotConfig:
 
         # ---------- 群聊配置 ----------
         self.group = []                 # 监听的群聊列表
+        self.group_api_map = {}         # 群聊专属接口映射 {群名: api_index}
         self.group_switch = False       # 群机器人总开关
         self.group_reply_at = False     # 群聊是否仅在被 @ 时才回复
         self.group_welcome = False      # 群新人欢迎语开关
@@ -124,6 +125,15 @@ class WXBotConfig:
         # ---------- 定时消息配置 ----------
         self.scheduled_msg_switch = False    # 定时消息总开关
         self.scheduled_msg_list = []         # 定时消息任务列表
+
+        # ---------- 定时朋友圈配置 ----------
+        self.scheduled_moments_switch = False  # 定时朋友圈总开关
+        self.scheduled_moments_list = []       # 定时朋友圈任务列表
+
+        # ---------- 随机朋友圈点赞配置 ----------
+        self.moments_like_switch = False  # 随机点赞总开关
+        self.moments_like_min    = 60     # 随机间隔最小分钟数
+        self.moments_like_max    = 120    # 随机间隔最大分钟数
 
         # ---------- 对话记忆配置 ----------
         self.memory_switch        = True     # 记忆开关（默认开启）
@@ -173,6 +183,7 @@ class WXBotConfig:
                     "AllListen_switch": False,
                     "listen_list": [],
                     "group": [],
+                    "group_api_map": {},
                     "group_switch": False,
                     "group_reply_at": False,
                     "group_welcome": False,
@@ -186,6 +197,11 @@ class WXBotConfig:
                     "keyword_dict": {},
                     "scheduled_msg_switch": False,
                     "scheduled_msg_list": [],
+                    "scheduled_moments_switch": False,
+                    "scheduled_moments_list": [],
+                    "moments_like_switch": False,
+                    "moments_like_min": 60,
+                    "moments_like_max": 120,
                     "everyday_start_stop_bot_switch": False,
                     "everyday_start_bot_time": "08:00",
                     "everyday_stop_bot_time": "23:00",
@@ -269,6 +285,7 @@ class WXBotConfig:
 
         # 群聊配置
         self.group                = self.config.get('group', [])
+        self.group_api_map        = self.config.get('group_api_map', {})
         self.group_switch         = self.config.get('group_switch')
         self.group_reply_at       = self.config.get('group_reply_at')
         self.group_welcome        = self.config.get('group_welcome')
@@ -289,6 +306,15 @@ class WXBotConfig:
         self.scheduled_msg_switch = self.config.get('scheduled_msg_switch',
                                                      self.config.get('everyday_msg_switch', False))
         self.scheduled_msg_list   = self.config.get('scheduled_msg_list', [])
+
+        # 定时朋友圈配置
+        self.scheduled_moments_switch = self.config.get('scheduled_moments_switch', False)
+        self.scheduled_moments_list   = self.config.get('scheduled_moments_list', [])
+
+        # 随机朋友圈点赞配置
+        self.moments_like_switch = self.config.get('moments_like_switch', False)
+        self.moments_like_min    = max(1,    int(self.config.get('moments_like_min', 60)))
+        self.moments_like_max    = max(self.moments_like_min, int(self.config.get('moments_like_max', 120)))
 
         # 旧配置自动迁移：everyday_msg_dict -> scheduled_msg_list
         if not self.scheduled_msg_list and self.config.get('everyday_msg_dict'):
@@ -954,8 +980,10 @@ class WXBot:
 
         # 根据配置中的 api_sdk 字段选择对应的 AI 接口
         self.api = self._init_api()
+        self.api_cache = {}                     # 群组专属接口缓存 {api_index: api_instance}
 
         self.wx                  = None         # WeChat 客户端对象（延迟初始化）
+        self._moments_like_next_time = None     # 下次随机朋友圈点赞的触发时间（datetime 或 None）
         self.memory_manager      = None         # 记忆管理器（init_wx_listeners 时创建）
         self.all_Mode_listen_list = []           # 全局模式下的动态监听列表，元素格式：[昵称, 最新消息时间戳]
         self.start_time          = datetime.now()
@@ -969,7 +997,7 @@ class WXBot:
         self.last_msg_sender     = None         # 最近一条消息的发送者
 
     def _init_api(self):
-        """根据配置中的 api_sdk 字段实例化对应的 AI 接口对象"""
+        """根据配置中的 api_sdk 字段实例化对应的 AI 接口对象（默认接口）"""
         sdk = self.config.api_sdk
         if sdk == "Dify":
             log(message="使用Dify API")
@@ -986,6 +1014,59 @@ class WXBot:
         else:
             log(level="ERROR", message="未配置API SDK, 默认使用OpenAI SDK")
             return OpenAIAPI(self.config)
+
+    def _init_api_by_index(self, idx):
+        """
+        根据指定接口索引实例化 AI 接口对象，用于群组专属接口。
+        会创建一个只含接口相关字段的轻量代理配置对象，避免干扰主配置。
+        """
+        configs = self.config.api_configs
+        if idx < 0 or idx >= len(configs):
+            log(level="WARNING", message=f"群组接口索引 {idx} 超出范围，回退到默认接口")
+            return self.api
+        cfg = configs[idx]
+        sdk = cfg.get('sdk', 'DusAPI')
+
+        # 轻量代理配置：仅覆盖接口相关字段，其余不涉及
+        class _ApiProxy:
+            pass
+        tmp = _ApiProxy()
+        tmp.api_sdk  = sdk
+        tmp.api_key  = cfg.get('key', '')
+        tmp.base_url = cfg.get('url', '')
+        tmp.model1   = cfg.get('model', '')
+        tmp.prompt   = self.config.prompt   # 备用（实际 chat() 调用时会显式传入当前 prompt）
+
+        log(message=f"初始化群组专属接口：索引{idx}  SDK:{sdk}  模型:{tmp.model1}")
+        if sdk == "Dify":
+            return DifyAPI(tmp)
+        elif sdk == "OpenAI SDK":
+            return OpenAIAPI(tmp)
+        elif sdk == "Coze":
+            return CozeAPI(tmp)
+        elif sdk == "DusAPI":
+            return DusAPI(tmp)
+        else:
+            return OpenAIAPI(tmp)
+
+    def _get_group_api(self, group_name):
+        """
+        获取群聊对应的 AI 接口实例。
+        - 若配置了 group_api_map 映射，则返回对应接口（惰性初始化并缓存）
+        - 否则返回默认接口 self.api
+        """
+        raw = self.config.group_api_map.get(group_name)
+        if raw is None:
+            return self.api
+        try:
+            idx = int(raw)
+        except (ValueError, TypeError):
+            return self.api
+        if idx < 0:
+            return self.api
+        if idx not in self.api_cache:
+            self.api_cache[idx] = self._init_api_by_index(idx)
+        return self.api_cache[idx]
 
     # ----------------------------------------------------------
     # 初始化与检测
@@ -1121,6 +1202,33 @@ class WXBot:
             except Exception as e:
                 log(level="ERROR", message=f"定时消息注册失败：{e}")
 
+        # 注册定时朋友圈任务
+        if self.config.scheduled_moments_switch:
+            log(message="定时朋友圈注册...")
+            try:
+                schedule.clear('scheduled_moments')
+                for task in self.config.scheduled_moments_list:
+                    if not task.get('enabled', True):
+                        continue
+                    time_str    = task.get('time', '08:00')
+                    text        = task.get('text', '')
+                    images      = task.get('images', [])
+                    privacy     = task.get('privacy', 'public')
+                    tags        = task.get('tags', [])
+                    repeat_type = task.get('repeat_type', 'daily')
+                    task_id     = task.get('id', '')
+                    weekdays    = task.get('weekdays', [])
+                    dates       = task.get('dates', [])
+
+                    schedule.every().day.at(time_str).do(
+                        self.send_scheduled_moments,
+                        text, images, privacy, tags, repeat_type, weekdays, dates, task_id
+                    ).tag('scheduled_moments')
+                    log(message=f"注册定时朋友圈：{repeat_type} {time_str}")
+                log(message="定时朋友圈注册完成")
+            except Exception as e:
+                log(level="ERROR", message=f"定时朋友圈注册失败：{e}")
+
         log(message="监听器初始化完成")
 
     # ----------------------------------------------------------
@@ -1195,6 +1303,151 @@ class WXBot:
             self.config.save_config()
             log(message=f"一次性定时任务 {task_id} 已执行完毕，自动禁用")
             return schedule.CancelJob  # 取消该 schedule 任务
+
+    # ----------------------------------------------------------
+    # 定时朋友圈发送
+    # ----------------------------------------------------------
+
+    def send_scheduled_moments(self, text, images, privacy, tags, repeat_type, weekdays, dates, task_id):
+        """
+        定时触发的朋友圈发送函数，根据 repeat_type 判断今天是否需要发送。
+
+        :param text:        朋友圈文字内容（可为空，但文字和图片至少有一个）
+        :param images:      朋友圈图片路径列表（本地绝对路径，最多9张，可为空）
+        :param privacy:     隐私设置（'public'=公开 / 'whitelist'=白名单 / 'blacklist'=黑名单）
+        :param tags:        隐私标签列表（白名单/黑名单模式下生效）
+        :param repeat_type: 重复类型 (once/daily/weekly/monthly/custom)
+        :param weekdays:    每周几发送 (1=周一 ... 7=周日)
+        :param dates:       自定义日期列表 (["2026-03-20", ...]) 或每月几号 ([1, 15, ...])
+        :param task_id:     任务ID，用于 once 类型执行后自动禁用
+        """
+        now = datetime.now()
+        should_send = False
+
+        if repeat_type == 'daily':
+            should_send = True
+        elif repeat_type == 'weekly':
+            should_send = now.isoweekday() in weekdays
+        elif repeat_type == 'monthly':
+            should_send = now.day in dates
+        elif repeat_type == 'custom':
+            today_str = now.strftime('%Y-%m-%d')
+            should_send = today_str in dates
+        elif repeat_type == 'once':
+            today_str = now.strftime('%Y-%m-%d')
+            should_send = today_str in dates
+        else:
+            should_send = True
+
+        if not should_send:
+            return schedule.CancelJob if repeat_type == 'once' else None
+
+        log(message=f"定时朋友圈时间到（{repeat_type}），正在发送...")
+
+        try:
+            # 构建隐私配置
+            if privacy == 'whitelist':
+                privacy_config = {'privacy': '白名单', 'tags': tags}
+            elif privacy == 'blacklist':
+                privacy_config = {'privacy': '黑名单', 'tags': tags}
+            else:
+                privacy_config = {}
+
+            # 过滤有效图片路径（路径不为空）
+            valid_images = [img for img in images if img and img.strip()]
+
+            # 打开朋友圈
+            log(message="正在打开朋友圈...")
+            pyq = self.wx.Moments()
+            if pyq is None:
+                log(level="ERROR", message="打开朋友圈失败（返回None），请确认微信已开启朋友圈功能")
+                self.is_err(
+                    self.wx.nickname + " wxbot定时朋友圈发送失败！",
+                    "打开朋友圈失败，请在手机端确认朋友圈功能已开启"
+                )
+                return None
+
+            # 获取朋友圈对象 -> 随机延时 2~5 秒
+            delay1 = random.uniform(2, 5)
+            log(message=f"朋友圈已打开，等待 {delay1:.1f}s 后发布...")
+            time.sleep(delay1)
+
+            # 发布朋友圈
+            pyq.Publish(text, valid_images if valid_images else None, privacy_config)
+            log(message=f"朋友圈已发布，内容：{text[:30] + '...' if len(text) > 30 else text}，图片数：{len(valid_images)}")
+
+            # 发送完成 -> 随机延时 2~5 秒
+            delay2 = random.uniform(2, 5)
+            log(message=f"等待 {delay2:.1f}s 后关闭朋友圈...")
+            time.sleep(delay2)
+
+            # 关闭朋友圈
+            pyq.Close()
+            log(message="朋友圈已关闭")
+
+        except Exception as e:
+            log(level="ERROR", message=f"定时朋友圈发送失败：{e}")
+            self.is_err(
+                self.wx.nickname + " wxbot定时朋友圈发送失败！",
+                f"定时朋友圈发送失败：{e}",
+            )
+
+        # once 类型执行后自动禁用该任务
+        if repeat_type == 'once':
+            for task in self.config.scheduled_moments_list:
+                if task.get('id') == task_id:
+                    task['enabled'] = False
+                    break
+            self.config.config['scheduled_moments_list'] = self.config.scheduled_moments_list
+            self.config.save_config()
+            log(message=f"一次性定时朋友圈任务 {task_id} 已执行完毕，自动禁用")
+            return schedule.CancelJob
+
+    # ----------------------------------------------------------
+    # 随机朋友圈点赞
+    # ----------------------------------------------------------
+
+    def _do_moments_like(self):
+        """
+        随机朋友圈点赞执行函数。
+        流程：打开朋友圈 → 随机延时 1~5s → 获取内容列表 → 随机延时 1~5s
+              → 对第一条点赞 → 随机延时 1~5s → 关闭朋友圈。
+        每个动作之间均有随机延时以拟人化操作。
+        """
+        log(message="随机朋友圈点赞：开始执行...")
+        try:
+            pyq = self.wx.Moments()
+            if pyq is None:
+                log(level="ERROR", message="随机点赞：打开朋友圈失败（返回None），请在手机端确认朋友圈功能已开启")
+                self.is_err(self.wx.nickname + " wxbot随机朋友圈点赞失败！", "打开朋友圈返回None")
+                return
+
+            time.sleep(random.uniform(1, 5))
+
+            moments = pyq.GetMoments()
+            if not moments:
+                log(level="WARNING", message="随机点赞：获取朋友圈内容为空，跳过本次点赞")
+                time.sleep(random.uniform(1, 5))
+                pyq.Close()
+                return
+
+            time.sleep(random.uniform(1, 5))
+
+            moment = moments[0]
+            moment.Like()
+            log(message="随机朋友圈点赞：点赞完成")
+
+            time.sleep(random.uniform(1, 5))
+            pyq.Close()
+            log(message="随机朋友圈点赞：朋友圈已关闭")
+
+        except Exception as e:
+            log(level="ERROR", message=f"随机朋友圈点赞执行出错：{e}")
+            self.is_err(self.wx.nickname + " wxbot随机朋友圈点赞失败！", e)
+            try:
+                pyq.Close()
+            except Exception:
+                pass
 
     # ----------------------------------------------------------
     # 消息回调与处理入口
@@ -1324,7 +1577,8 @@ class WXBot:
                         history = self.memory_manager.get_messages(
                             chat.who, self.config.memory_context_count
                         )
-                    reply = self.api.chat(content_without_at, prompt=self.config.prompt, history=history)
+                    group_api = self._get_group_api(chat.who)
+                    reply = group_api.chat(content_without_at, prompt=self.config.prompt, history=history)
                 except Exception as e:
                     print(traceback.format_exc())
                     log(level="ERROR", message=str(e) + "\n群组中调用AI回复错误！！")
@@ -1448,6 +1702,7 @@ class WXBot:
             result = self.handle_change_prompt(chat, message)
         elif content == "/更新配置":
             self.config.refresh_config()
+            self.api_cache = {}   # 配置已更新，清除群组接口缓存
             self.init_wx_listeners()
             result = chat.SendMsg(content + ' 完成\n')
         elif content == "/当前版本":
@@ -1647,6 +1902,7 @@ class WXBot:
         self.config.save_config()
         self.config.refresh_config()
         self.api = self._init_api()
+        self.api_cache = {}   # 默认接口已切换，清除群组接口缓存
         cfg = self.config.api_configs[idx]
         return chat.SendMsg(f"已切换至接口 {n}\nSDK：{cfg.get('sdk', '')}\n模型：{cfg.get('model', '')}")
 
@@ -2127,8 +2383,9 @@ class WXBot:
 
                 # ---- 新好友检测模块（随机 30~300 次循环执行一次）----
                 if self.config.new_frined_switch:
-                    check_new_friend_time_MIN = 30
-                    check_new_friend_time_MAX = 300
+                    # 将秒数阈值除以循环周期得到循环次数（取整，最小1次）
+                    check_new_friend_time_MIN = max(1, int(30 / wait_time))
+                    check_new_friend_time_MAX = max(check_new_friend_time_MIN, int(300 / wait_time))
                     check_new_counter += 1
                     if check_new_counter >= random.randint(check_new_friend_time_MIN, check_new_friend_time_MAX):
                         try:
@@ -2146,9 +2403,27 @@ class WXBot:
                         if not self.run_flag:
                             log(level="ERROR", message=str(e) + "\n全局模式出错！！请检查程序！！")
 
-                # ---- 定时任务执行 ----
-                if self.config.scheduled_msg_switch:
+                # ---- 定时任务执行（定时消息 / 定时朋友圈）----
+                if self.config.scheduled_msg_switch or self.config.scheduled_moments_switch:
                     schedule.run_pending()
+
+                # ---- 随机朋友圈点赞模块 ----
+                if self.config.moments_like_switch:
+                    if self._moments_like_next_time is None:
+                        # 在 [min, max] 分钟范围内随机选取下次触发间隔
+                        lo = max(1, self.config.moments_like_min)
+                        hi = max(lo, self.config.moments_like_max)
+                        delay_min = random.randint(lo, hi)
+                        self._moments_like_next_time = datetime.now() + timedelta(minutes=delay_min)
+                        log(message=f"随机朋友圈点赞：下次触发 {self._moments_like_next_time.strftime('%H:%M:%S')}（{delay_min} 分钟后）")
+                    elif datetime.now() >= self._moments_like_next_time:
+                        try:
+                            self._do_moments_like()
+                        except Exception as e:
+                            log(level="ERROR", message=f"随机朋友圈点赞模块出错：{e}")
+                        self._moments_like_next_time = None  # 执行后重置，下次循环重新生成间隔
+                else:
+                    self._moments_like_next_time = None  # 开关关闭时重置计时器
 
             except Exception as e:
                 self.is_err(
