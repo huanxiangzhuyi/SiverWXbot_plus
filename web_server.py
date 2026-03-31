@@ -57,6 +57,8 @@ PORT = 10001
 CONFIG_FILE = os.path.join(base_dir(), 'config', 'config.json')
 ADMIN_FILE  = os.path.join(base_dir(), 'config', 'admin.json')
 EMAIL_FILE  = os.path.join(base_dir(), 'config', 'email.txt')
+PROMPT_DIR  = os.path.join(base_dir(), 'config', 'prompt')
+DEFAULT_PROMPT_CONTENT = "你是一个ai回复助手，请根据用户的问题给出回答,回复尽量保持在30字以内"
 
 # 启动时确保目录存在
 os.makedirs(os.path.join(base_dir(), 'config'),      exist_ok=True)
@@ -120,6 +122,61 @@ def log_server(level, msg):
     if len(log_messages) > 1000:
         log_messages.pop(0)
     print(f"[{timestamp}] [{level}] {msg}")
+
+# ----------------------------------------------------------
+# Prompt 文件管理辅助函数
+# ----------------------------------------------------------
+
+def _ensure_prompt_dir():
+    """确保 prompt 目录存在，若为空则创建默认 prompt 文件"""
+    os.makedirs(PROMPT_DIR, exist_ok=True)
+    try:
+        md_files = [f for f in os.listdir(PROMPT_DIR) if f.endswith('.md')]
+    except Exception:
+        md_files = []
+    if not md_files:
+        try:
+            with open(os.path.join(PROMPT_DIR, '默认.md'), 'w', encoding='utf-8') as f:
+                f.write(DEFAULT_PROMPT_CONTENT)
+        except Exception as e:
+            log('ERROR', f'创建默认 prompt 文件失败: {e}')
+
+def _get_prompts_list():
+    """扫描 PROMPT_DIR，返回 [{name, content}]，"默认" 排第一"""
+    _ensure_prompt_dir()
+    prompts = []
+    try:
+        for fname in os.listdir(PROMPT_DIR):
+            if not fname.endswith('.md'):
+                continue
+            name = fname[:-3]
+            try:
+                with open(os.path.join(PROMPT_DIR, fname), 'r', encoding='utf-8') as f:
+                    content = f.read()
+            except Exception:
+                content = ''
+            prompts.append({'name': name, 'content': content})
+    except Exception as e:
+        log('ERROR', f'扫描 prompt 目录失败: {e}')
+    # "默认" 排第一，其余字典序
+    prompts.sort(key=lambda p: (0 if p['name'] == '默认' else 1, p['name']))
+    return prompts
+
+def _migrate_prompt_from_config(config):
+    """若 config dict 中存在旧 prompt 字段，迁移到 默认.md，返回 True 表示需要写回"""
+    if 'prompt' not in config:
+        return False
+    _ensure_prompt_dir()
+    target = os.path.join(PROMPT_DIR, '默认.md')
+    if not os.path.exists(target):
+        try:
+            with open(target, 'w', encoding='utf-8') as f:
+                f.write(config['prompt'])
+            log('SUCCESS', '旧 prompt 字段已迁移至 config/prompt/默认.md')
+        except Exception as e:
+            log('ERROR', f'迁移 prompt 文件失败: {e}')
+    del config['prompt']
+    return True
 
 # 读取配置文件
 def read_config():
@@ -265,8 +322,25 @@ def dashboard():
     config.setdefault('chat_image_recognition_api',    0)        # 私聊识别接口索引
     config.setdefault('group_image_recognition_switch', False)  # 群组图片识别开关
     config.setdefault('group_image_recognition_api',   0)        # 群组识别接口索引
+    config.setdefault('custom_forward_switch', False)            # 自定义转发总开关
+    config.setdefault('custom_forward_list', [])                 # 自定义转发规则列表
 
-    return render_template('dashboard.html', config=config, logs=log_messages[-50:])
+    # 多 Prompt：迁移旧 prompt 字段 + 补充新字段默认值
+    if _migrate_prompt_from_config(config):
+        try:
+            with open(CONFIG_FILE, 'w', encoding='utf-8') as _f:
+                json.dump(config, _f, ensure_ascii=False, indent=4)
+            log('SUCCESS', '旧 prompt 字段已迁移，config.json 已更新')
+        except Exception as _e:
+            log('ERROR', f'迁移后写回 config.json 失败: {_e}')
+    _ensure_prompt_dir()
+    prompts = _get_prompts_list()
+    config.setdefault('default_prompt', '默认')
+    config.setdefault('chat_prompt_map', {})
+    config.setdefault('chat_api_map', {})
+    config.setdefault('group_prompt_map', {})
+
+    return render_template('dashboard.html', config=config, logs=log_messages[-50:], prompts=prompts)
 
 @app.route('/get_logs')
 @login_required
@@ -294,6 +368,7 @@ def _coerce_bool_fields(merged_config):
         'reply_delay_switch',               # 发送延迟开关
         'chat_image_recognition_switch',    # 私聊图片识别开关
         'group_image_recognition_switch',   # 群组图片识别开关
+        'custom_forward_switch',            # 自定义转发总开关
     ]
     for field in boolean_fields:
         if field in merged_config:
@@ -304,7 +379,7 @@ def _coerce_bool_fields(merged_config):
                 merged_config[field] = bool(v)
 
 def _coerce_list_fields(merged_config):
-    list_fields = ['listen_list', 'group', 'new_friend_msg', 'scheduled_msg_list', 'scheduled_moments_list', 'random_moments_list']
+    list_fields = ['listen_list', 'group', 'new_friend_msg', 'scheduled_msg_list', 'scheduled_moments_list', 'random_moments_list', 'custom_forward_list']
     for field in list_fields:
         if field in merged_config and not isinstance(merged_config[field], list):
             if isinstance(merged_config[field], str):
@@ -370,6 +445,51 @@ def _coerce_dict_fields(merged_config):
         else:
             merged_config['group_api_map'] = {}
 
+    # chat_api_map: 同 group_api_map，适用于私聊白名单用户
+    if 'chat_api_map' in merged_config:
+        cam = merged_config['chat_api_map']
+        if isinstance(cam, dict):
+            clean = {}
+            for k, v in cam.items():
+                k = str(k).strip()
+                try:
+                    vi = int(v)
+                    if k and vi >= -1:
+                        clean[k] = vi
+                except (ValueError, TypeError):
+                    pass
+            merged_config['chat_api_map'] = clean
+        else:
+            merged_config['chat_api_map'] = {}
+
+    # chat_prompt_map: 值为非空字符串（prompt 文件名）
+    if 'chat_prompt_map' in merged_config:
+        cpm = merged_config['chat_prompt_map']
+        if isinstance(cpm, dict):
+            clean = {}
+            for k, v in cpm.items():
+                k = str(k).strip()
+                v = str(v).strip()
+                if k and v:
+                    clean[k] = v
+            merged_config['chat_prompt_map'] = clean
+        else:
+            merged_config['chat_prompt_map'] = {}
+
+    # group_prompt_map: 同 chat_prompt_map，适用于群组
+    if 'group_prompt_map' in merged_config:
+        gpm = merged_config['group_prompt_map']
+        if isinstance(gpm, dict):
+            clean = {}
+            for k, v in gpm.items():
+                k = str(k).strip()
+                v = str(v).strip()
+                if k and v:
+                    clean[k] = v
+            merged_config['group_prompt_map'] = clean
+        else:
+            merged_config['group_prompt_map'] = {}
+
 # 保存配置文件
 def save_config(config_data):
     try:
@@ -428,6 +548,83 @@ def save_config_route():
     except Exception as e:
         log('ERROR', f'保存配置出错: {str(e)}')
         return jsonify({'status': 'error', 'message': str(e)})
+
+# ----------------------------------------------------------
+# Prompt 文件管理路由
+# ----------------------------------------------------------
+
+@app.route('/list_prompts')
+@login_required
+def list_prompts_route():
+    return jsonify({'status': 'success', 'prompts': _get_prompts_list()})
+
+@app.route('/save_prompt', methods=['POST'])
+@login_required
+def save_prompt_route():
+    import re, tempfile
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'status': 'error', 'msg': '无效请求'})
+        name     = str(data.get('name', '')).strip()
+        content  = str(data.get('content', ''))
+        old_name = str(data.get('old_name', '')).strip()
+        # 去掉用户误填的 .md 后缀
+        if name.lower().endswith('.md'):
+            name = name[:-3].strip()
+        if not name:
+            return jsonify({'status': 'error', 'msg': 'Prompt 名称不能为空'})
+        # 白名单校验：只允许中文/字母/数字/空格/下划线/连字符
+        if not re.fullmatch(r'[\u4e00-\u9fff\w\s\-]+', name):
+            return jsonify({'status': 'error', 'msg': 'Prompt 名称含非法字符（只允许中文、字母、数字、空格、_ 和 -）'})
+        _ensure_prompt_dir()
+        # 重命名：删除旧文件
+        if old_name and old_name != name:
+            old_path = os.path.join(PROMPT_DIR, f'{old_name}.md')
+            if os.path.exists(old_path):
+                os.remove(old_path)
+        # 原子写入
+        target = os.path.join(PROMPT_DIR, f'{name}.md')
+        tmp_fd, tmp_path = tempfile.mkstemp(dir=PROMPT_DIR, suffix='.tmp')
+        try:
+            with os.fdopen(tmp_fd, 'w', encoding='utf-8') as tf:
+                tf.write(content)
+            os.replace(tmp_path, target)
+        except Exception:
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+            raise
+        log('SUCCESS', f'Prompt 已保存：{name}.md')
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        log('ERROR', f'保存 Prompt 失败: {e}')
+        return jsonify({'status': 'error', 'msg': str(e)})
+
+@app.route('/delete_prompt', methods=['POST'])
+@login_required
+def delete_prompt_route():
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'status': 'error', 'msg': '无效请求'})
+        name = str(data.get('name', '')).strip()
+        if not name:
+            return jsonify({'status': 'error', 'msg': '名称不能为空'})
+        _ensure_prompt_dir()
+        # 不允许删除最后一个
+        md_files = [f for f in os.listdir(PROMPT_DIR) if f.endswith('.md')]
+        if len(md_files) <= 1:
+            return jsonify({'status': 'error', 'msg': '不允许删除最后一个 Prompt'})
+        target = os.path.join(PROMPT_DIR, f'{name}.md')
+        if os.path.exists(target):
+            os.remove(target)
+        log('SUCCESS', f'Prompt 已删除：{name}.md')
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        log('ERROR', f'删除 Prompt 失败: {e}')
+        return jsonify({'status': 'error', 'msg': str(e)})
 
 # 启动/停止机器人
 bot = None
@@ -892,6 +1089,12 @@ def main():
                 "chat_image_recognition_api": 0,
                 "group_image_recognition_switch": False,
                 "group_image_recognition_api": 0,
+                "custom_forward_switch": False,
+                "custom_forward_list": [],
+                "default_prompt": "默认",
+                "chat_prompt_map": {},
+                "chat_api_map": {},
+                "group_prompt_map": {},
             }
             with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
                 json.dump(default_config, f, ensure_ascii=False, indent=4)

@@ -119,6 +119,18 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
 .keyword-item { display: flex; gap: 8px; margin-bottom: 8px; align-items: flex-start; }
 .keyword-item textarea { min-height: 60px; }
 
+/* ===== Custom Forward Items ===== */
+.custom-forward-item { background: var(--muted-bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
+.fwd-conditional-block { display: none; margin-top: 8px; }
+
+/* ===== Prompt Editor ===== */
+.prompt-two-col { display:flex; gap:0; min-height:320px; }
+.prompt-list-panel { width:190px; flex-shrink:0; border-right:1px solid var(--border); padding-right:16px; margin-right:20px; display:flex; flex-direction:column; }
+.prompt-list-item { padding:8px 10px; border-radius:6px; cursor:pointer; font-size:13.5px; color:var(--card-fg); margin-bottom:4px; transition:background .15s; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.prompt-list-item:hover { background:var(--muted-bg); }
+.prompt-list-item.active { background:var(--primary); color:#fff; font-weight:600; }
+.prompt-editor-panel { flex:1; min-width:0; display:flex; flex-direction:column; }
+
 /* ===== Scheduled Msg ===== */
 .scheduled-msg-item, .scheduled-moments-item, .random-moments-item { background: var(--muted-bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
 .weekday-btn { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; border: 1.5px solid var(--border); background: var(--card); font-size: 12.5px; font-weight: 600; color: var(--muted); cursor: pointer; transition: all .15s; }
@@ -249,6 +261,7 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
   <div class="nav-item"><a class="nav-link" data-tab="tab-friend"><i class="bi bi-person-plus"></i> 好友管理</a></div>
   <div class="nav-divider"></div>
   <div class="nav-item"><a class="nav-link" data-tab="tab-keyword"><i class="bi bi-key"></i> 关键词回复</a></div>
+  <div class="nav-item"><a class="nav-link" data-tab="tab-forward"><i class="bi bi-share"></i> 自定义转发</a></div>
   <div class="nav-item"><a class="nav-link" data-tab="tab-schedule"><i class="bi bi-alarm"></i> 定时消息</a></div>
   <div class="nav-item"><a class="nav-link" data-tab="tab-moments"><i class="bi bi-image"></i> 朋友圈</a></div>
   <div class="nav-item"><a class="nav-link" data-tab="tab-startstop"><i class="bi bi-clock-history"></i> 定时启停</a></div>
@@ -316,6 +329,15 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
           <a href="https://wwbuf.lanzout.com/b00tcdnlte" target="_blank" style="display:inline-flex;align-items:center;gap:6px;padding:7px 16px;background:#576B95;color:#fff;border-radius:6px;font-size:13px;font-weight:600;text-decoration:none;transition:opacity .2s;" onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
             <i class="bi bi-cloud-download"></i> exe 蓝奏云 (密码：1234)
           </a>
+        </div>
+        <div style="margin-top:14px;padding:10px 14px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;font-size:12.5px;color:#0c4a6e;line-height:1.8;">
+          <div style="font-weight:700;margin-bottom:4px;"><i class="bi bi-info-circle-fill" style="color:#0ea5e9;margin-right:5px;"></i>更新方法</div>
+          <div>· <b>源码版</b>：直接替换 <code>wxbot_core.py</code>、<code>web_server.py</code>、<code>templates/</code> 等源码文件即可</div>
+          <div>· <b>exe 版</b>：替换 exe 文件即可</div>
+          <div>· 保留 <code>config/</code> 和 <code>memory/</code> 文件夹，原有配置与对话记忆完全复用，无需重新配置</div>
+          <div style="margin-top:6px;padding:6px 10px;background:#fef9c3;border:1px solid #fde047;border-radius:6px;color:#713f12;font-weight:600;">
+            <i class="bi bi-exclamation-triangle-fill" style="color:#eab308;margin-right:4px;"></i>更新前请先备份 <code>config/</code> 和 <code>memory/</code> 文件夹，以防意外
+          </div>
         </div>
       </div>
       <!-- 检查失败 -->
@@ -508,11 +530,52 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
   <!-- ===== Tab: Prompt ===== -->
   <div class="config-panel" id="tab-prompt">
     <div class="cfg-card">
-      <div class="cfg-card-header"><i class="bi bi-chat-square-text"></i><h5>Prompt 设置</h5><span class="desc">配置 AI 的系统提示词</span></div>
-      <div class="mb-3">
-        <label class="cfg-label" for="prompt">系统 Prompt</label>
-        <textarea id="prompt" name="prompt">{{ config.prompt }}</textarea>
-        <div class="cfg-hint">支持富文本编辑，定义 AI 的角色和行为</div>
+      <div class="cfg-card-header"><i class="bi bi-chat-square-text"></i><h5>Prompt 管理</h5><span class="desc">管理多份 AI 系统提示词</span></div>
+      <div style="padding:10px 14px;background:#fffbe6;border:1px solid #ffe58f;border-radius:6px;color:#856404;font-size:12.5px;line-height:1.8;margin-bottom:16px;">
+        <i class="bi bi-info-circle-fill" style="color:#d97706;margin-right:4px;"></i>
+        Prompt 存储于 <code>config/prompt/</code> 文件夹，每个 <code>.md</code> 文件为一份 Prompt。
+        除在面板中操作外，也可直接在该文件夹中新建 <code>.md</code> 文件，<b>保存配置后刷新页面</b>即可看到。
+      </div>
+      <div class="prompt-two-col">
+        <!-- 左：列表 -->
+        <div class="prompt-list-panel">
+          <div style="font-size:12px;color:var(--muted);font-weight:600;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px;">Prompt 列表</div>
+          <div id="prompt-list" style="flex:1;overflow-y:auto;">
+            {% for p in prompts %}
+            <div class="prompt-list-item {% if loop.first %}active{% endif %}"
+                 data-name="{{ p.name }}"
+                 data-content="{{ p.content | e }}">{{ p.name }}</div>
+            {% endfor %}
+          </div>
+          <button type="button" class="btn-add" id="btn-new-prompt" style="margin-top:12px;justify-content:center;">
+            <i class="bi bi-plus-circle"></i> 新建 Prompt
+          </button>
+        </div>
+        <!-- 右：编辑区 -->
+        <div class="prompt-editor-panel">
+          <div class="mb-2">
+            <label class="cfg-label">Prompt 名称 <span style="font-size:11px;color:var(--muted);font-weight:400;">（将以此命名保存为 .md 文件）</span></label>
+            <input type="text" class="form-control" id="prompt-name-input" placeholder="输入 Prompt 名称，如：客服助手">
+          </div>
+          <div class="mb-3" style="flex:1;display:flex;flex-direction:column;">
+            <label class="cfg-label">Prompt 内容</label>
+            <textarea class="form-control" id="prompt-content-input"
+                      style="flex:1;min-height:260px;font-family:monospace;font-size:13px;resize:vertical;"
+                      placeholder="在此输入 Prompt 正文内容..."></textarea>
+          </div>
+          <div style="display:flex;gap:8px;justify-content:flex-end;">
+            <button type="button" id="btn-delete-prompt"
+                    style="display:inline-flex;align-items:center;gap:5px;padding:7px 16px;background:var(--card);color:var(--danger);border:1px solid var(--danger);border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s;"
+                    onmouseover="this.style.background='#fff0f0'" onmouseout="this.style.background='var(--card)'">
+              <i class="bi bi-trash3"></i> 删除此 Prompt
+            </button>
+            <button type="button" id="btn-save-prompt"
+                    style="display:inline-flex;align-items:center;gap:5px;padding:7px 20px;background:var(--primary);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;transition:opacity .2s;"
+                    onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
+              <i class="bi bi-check2-circle"></i> 保存 Prompt
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -544,23 +607,47 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
         <label for="AllListen_switch">全局监听</label>
         <span class="switch-desc">开启后监听所有消息，下方列表变为黑名单</span>
       </div>
+      <!-- 全局 Prompt 选择（全局监听模式时显示） -->
+      <div id="global-prompt-row" style="display:{% if config.AllListen_switch %}flex{% else %}none{% endif %};align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;padding:10px 14px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;">
+        <label class="cfg-label" style="margin:0;white-space:nowrap;color:#0c4a6e;">全局 Prompt：</label>
+        <select class="form-select" id="default_prompt_select" style="max-width:200px;">
+          {% for p in prompts %}
+          <option value="{{ p.name }}" {% if p.name == config.default_prompt %}selected{% endif %}>{{ p.name }}</option>
+          {% endfor %}
+        </select>
+        <span class="cfg-hint" style="margin:0;color:#0369a1;">接口使用模型配置中的默认选择 &nbsp;·&nbsp; 如新增了 Prompt 未看到，请保存配置后刷新页面</span>
+      </div>
       <!-- 模式提示条 -->
       <div id="listenModeHint" class="d-flex align-items-center gap-2 px-3 py-2 rounded mb-3" style="font-size:13px;font-weight:600;{% if config.AllListen_switch %}background:#FEF2F2;color:#DC2626;border:1px solid #FECACA{% else %}background:#F0FDF4;color:#16A34A;border:1px solid #BBF7D0{% endif %}">
         <i class="bi {% if config.AllListen_switch %}bi-shield-x{% else %}bi-shield-check{% endif %}" style="font-size:16px"></i>
         <span id="listenModeText">{% if config.AllListen_switch %}当前为黑名单模式 — 以下用户的消息将被忽略{% else %}当前为白名单模式 — 仅监听以下用户的消息{% endif %}</span>
       </div>
       <div class="mb-2">
-        <label class="cfg-label" id="listenListLabel">{% if config.AllListen_switch %}黑名单列表{% else %}监听列表{% endif %}</label>
+        <label class="cfg-label" id="listenListLabel">{% if config.AllListen_switch %}黑名单列表{% else %}监听列表 <span style="font-size:11px;color:var(--muted);font-weight:400;">（白名单模式：可为每个用户设置专属 Prompt 和接口）</span>{% endif %}</label>
       </div>
-      <div id="listen_list">
+      <div id="listen_container">
         {% for item in config.listen_list %}
-        <div class="list-item">
-          <input type="text" class="form-control" name="listen_list" value="{{ item }}">
+        <div class="list-item listen-item" style="flex-wrap:wrap;gap:6px;">
+          <input type="text" class="form-control" name="listen_list" value="{{ item }}" placeholder="联系人昵称" style="min-width:120px;">
+          <div class="listen-extra" style="display:{% if not config.AllListen_switch %}flex{% else %}none{% endif %};gap:6px;flex-wrap:wrap;">
+            <select class="form-select chat-prompt-select" style="width:145px;flex-shrink:0;" title="专属Prompt（空=使用全局Prompt）">
+              <option value="">默认（全局）</option>
+              {% for p in prompts %}
+              <option value="{{ p.name }}" {% if config.chat_prompt_map.get(item) == p.name %}selected{% endif %}>{{ p.name }}</option>
+              {% endfor %}
+            </select>
+            <select class="form-select chat-api-select" style="width:160px;flex-shrink:0;" title="专属接口（默认=全局配置接口）">
+              <option value="-1">默认接口</option>
+              {% for cfg in config.api_configs %}
+              <option value="{{ loop.index0 }}" {% if config.chat_api_map.get(item) == loop.index0 %}selected{% endif %}>接口{{ loop.index }}: {{ cfg.model }}</option>
+              {% endfor %}
+            </select>
+          </div>
           <button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>
         </div>
         {% endfor %}
       </div>
-      <button type="button" class="btn-add" data-target="#listen_list" data-name="listen_list"><i class="bi bi-plus-circle"></i> <span id="listenAddText">{% if config.AllListen_switch %}添加黑名单{% else %}添加监听{% endif %}</span></button>
+      <button type="button" class="btn-add" id="btn-add-listen-item"><i class="bi bi-plus-circle"></i> <span id="listenAddText">{% if config.AllListen_switch %}添加黑名单{% else %}添加监听{% endif %}</span></button>
       <hr>
       <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:6px;">
         <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
@@ -570,7 +657,7 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
                  onchange="toggleChatImgApi(this.checked)">
           <label for="chat_image_recognition_switch" style="font-weight:600;cursor:pointer;">启用私聊图片识别</label>
         </div>
-        <div id="chat_img_api_row" style="display:{% if config.chat_image_recognition_switch %}flex{% else %}none{% endif %};align-items:center;gap:8px;">
+        <div id="chat_img_api_row" style="display:{% if config.chat_image_recognition_switch %}flex{% else %}none{% endif %};align-items:center;gap:8px;flex-wrap:wrap;">
           <label style="font-size:13px;white-space:nowrap;margin:0;">识别接口:</label>
           <select class="form-select" id="chat_image_recognition_api" name="chat_image_recognition_api" style="width:210px;">
             {% for cfg in config.api_configs %}
@@ -580,6 +667,7 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
             </option>
             {% endfor %}
           </select>
+          <span class="cfg-hint" style="margin:0;">如新增了接口但未看到，请保存配置后刷新页面</span>
         </div>
       </div>
       <div style="padding:9px 14px;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;color:#92400e;font-size:12.5px;line-height:1.8;">
@@ -622,14 +710,20 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
       <label class="cfg-label">群组监听列表</label>
       <div class="cfg-hint" style="margin-bottom:10px;padding:10px 14px;background:#f0f7ff;border:1px solid #bcd4f5;border-radius:6px;color:#1a5fa8;font-size:12.5px;line-height:1.8;">
         <i class="bi bi-info-circle" style="color:#2d8cf0;"></i>
-        <strong>群组专属接口</strong>：每个群聊可在右侧下拉框中单独选择调用的 AI 接口，实现一个面板管理多个不同 AI 的群聊。<br>
-        选择 <strong>默认接口</strong> 则使用「模型配置」页中当前选中的接口；选择具体接口后该群的所有 AI 回复均走指定接口，互不影响。
+        <strong>群组专属 Prompt 和接口</strong>：每个群聊可单独选择调用的 AI 接口和 Prompt，实现一个面板管理多个不同群聊场景。<br>
+        选择 <strong>默认</strong> 则跟随「模型配置」或全局 Prompt；如新增了接口或 Prompt 但未看到，请保存配置后刷新页面。
       </div>
       <div id="group_container">
         {% for g in config.group %}
-        <div class="list-item">
+        <div class="list-item" style="flex-wrap:wrap;gap:6px;">
           <input type="text" class="form-control" name="group" value="{{ g }}" placeholder="群聊名称">
-          <select class="form-select group-api-select" style="width:175px;flex-shrink:0;" title="该群调用的AI接口（选默认则跟随全局配置）">
+          <select class="form-select group-prompt-select" style="width:145px;flex-shrink:0;" title="该群专属Prompt（空=使用全局Prompt）">
+            <option value="">默认（全局）</option>
+            {% for p in prompts %}
+            <option value="{{ p.name }}" {% if config.group_prompt_map.get(g) == p.name %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+          <select class="form-select group-api-select" style="width:160px;flex-shrink:0;" title="该群调用的AI接口（选默认则跟随全局配置）">
             <option value="-1" {% if config.group_api_map.get(g) is none or config.group_api_map.get(g) == -1 %}selected{% endif %}>默认接口</option>
             {% for cfg in config.api_configs %}
             <option value="{{ loop.index0 }}" {% if config.group_api_map.get(g) == loop.index0 %}selected{% endif %}>接口{{ loop.index }}: {{ cfg.model }}</option>
@@ -649,7 +743,7 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
                  onchange="toggleGroupImgApi(this.checked)">
           <label for="group_image_recognition_switch" style="font-weight:600;cursor:pointer;">启用群组图片识别</label>
         </div>
-        <div id="group_img_api_row" style="display:{% if config.group_image_recognition_switch %}flex{% else %}none{% endif %};align-items:center;gap:8px;">
+        <div id="group_img_api_row" style="display:{% if config.group_image_recognition_switch %}flex{% else %}none{% endif %};align-items:center;gap:8px;flex-wrap:wrap;">
           <label style="font-size:13px;white-space:nowrap;margin:0;">识别接口:</label>
           <select class="form-select" id="group_image_recognition_api" name="group_image_recognition_api" style="width:210px;">
             {% for cfg in config.api_configs %}
@@ -659,6 +753,7 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
             </option>
             {% endfor %}
           </select>
+          <span class="cfg-hint" style="margin:0;">如新增了接口但未看到，请保存配置后刷新页面</span>
         </div>
       </div>
       <div style="padding:9px 14px;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;color:#92400e;font-size:12.5px;line-height:1.8;">
@@ -721,6 +816,98 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
         {% endfor %}
       </div>
       <button type="button" class="btn-add" id="btn-add-keyword"><i class="bi bi-plus-circle"></i> 添加关键词</button>
+    </div>
+  </div>
+
+  <!-- ===== Tab: Custom Forward ===== -->
+  <div class="config-panel" id="tab-forward">
+    <div class="cfg-card">
+      <div class="cfg-card-header"><i class="bi bi-share"></i><h5>自定义规则转发</h5><span class="desc">监听指定来源，按规则将消息转发给目标</span></div>
+      <div class="cfg-hint" style="margin-bottom:14px;padding:10px 14px;background:#fffbe6;border:1px solid #ffe58f;border-radius:6px;color:#856404;font-size:12.5px;line-height:1.7;">
+        <b>功能说明：</b>监听指定来源窗口，当消息满足触发条件时自动转发给目标。<br>
+        <b>关键词转发</b>：消息内容包含任意关键词时触发 ｜ <b>固定发送人转发</b>：消息的发送人匹配时触发 ｜ <b>无差别转发</b>：所有消息均转发<br>
+        <b>注意：</b>转发来源如已在「私聊监听」或「群组管理」中，无需重复填写，机器人启动时会自动跳过重复注册。
+      </div>
+      <div class="switch-row">
+        <input class="form-check-input" type="checkbox" id="custom_forward_switch" name="custom_forward_switch" {% if config.custom_forward_switch %}checked{% endif %}>
+        <label for="custom_forward_switch">启用自定义规则转发</label>
+      </div>
+      <div id="custom_forward_container">
+        {% for rule in config.custom_forward_list %}
+        <div class="custom-forward-item" data-rule-id="{{ rule.id }}">
+          <div class="d-flex align-items-center justify-content-between mb-3">
+            <span style="font-size:13px;font-weight:600;color:var(--primary);">转发规则</span>
+            <button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>
+          </div>
+          <!-- 监听来源 -->
+          <div class="mb-3">
+            <label class="cfg-label">监听来源 <span style="font-size:11px;color:var(--primary);font-weight:400;">（填入微信联系人昵称或群名，可添加多个）</span></label>
+            <div class="fwd-source-list">
+              {% for src in rule.sources %}
+              <div class="list-item" style="margin-bottom:6px;">
+                <input type="text" class="form-control" name="fwd_source" value="{{ src }}" placeholder="联系人昵称或群名">
+                <button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>
+              </div>
+              {% endfor %}
+            </div>
+            <button type="button" class="btn-add btn-add-fwd-source" style="margin-top:6px;"><i class="bi bi-plus-circle"></i> 添加来源</button>
+          </div>
+          <!-- 转发类型 -->
+          <div class="mb-3">
+            <label class="cfg-label">转发类型 <span style="font-size:11px;color:var(--muted);font-weight:400;">（选择消息触发转发的条件类型）</span></label>
+            <select class="form-select fwd-type-select" style="max-width:260px;">
+              <option value="keyword" {% if rule.type == 'keyword' %}selected{% endif %}>关键词转发</option>
+              <option value="all" {% if rule.type == 'all' %}selected{% endif %}>无差别转发</option>
+              <option value="sender" {% if rule.type == 'sender' %}selected{% endif %}>固定发送人转发</option>
+            </select>
+          </div>
+          <!-- 关键词列表（type=keyword 时显示） -->
+          <div class="fwd-conditional-block fwd-keyword-block mb-3" {% if rule.type == 'keyword' %}style="display:block;"{% endif %}>
+            <label class="cfg-label">关键词列表 <span style="font-size:11px;color:var(--primary);font-weight:400;">（消息内容包含任意一个关键词即触发转发）</span></label>
+            <div class="fwd-kw-list">
+              {% for kw in rule.keywords %}
+              <div class="list-item" style="margin-bottom:6px;">
+                <input type="text" class="form-control" name="fwd_keyword" value="{{ kw }}" placeholder="关键词">
+                <button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>
+              </div>
+              {% endfor %}
+            </div>
+            <button type="button" class="btn-add btn-add-fwd-kw" style="margin-top:6px;"><i class="bi bi-plus-circle"></i> 添加关键词</button>
+          </div>
+          <!-- 发送人列表（type=sender 时显示） -->
+          <div class="fwd-conditional-block fwd-sender-block mb-3" {% if rule.type == 'sender' %}style="display:block;"{% endif %}>
+            <label class="cfg-label">发送人列表 <span style="font-size:11px;color:var(--primary);font-weight:400;">（填入微信昵称，仅该发送人的消息才触发转发）</span></label>
+            <div class="fwd-sender-list">
+              {% for sd in rule.senders %}
+              <div class="list-item" style="margin-bottom:6px;">
+                <input type="text" class="form-control" name="fwd_sender" value="{{ sd }}" placeholder="发送人昵称">
+                <button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>
+              </div>
+              {% endfor %}
+            </div>
+            <button type="button" class="btn-add btn-add-fwd-sender" style="margin-top:6px;"><i class="bi bi-plus-circle"></i> 添加发送人</button>
+          </div>
+          <!-- 转发目标 -->
+          <div class="mb-1">
+            <label class="cfg-label">转发目标 <span style="font-size:11px;color:var(--primary);font-weight:400;">（填入联系人昵称或群名，可添加多个，每次转发间隔 1 秒）</span></label>
+            <div class="fwd-target-list">
+              {% for tgt in rule.targets %}
+              <div class="list-item" style="margin-bottom:6px;">
+                <input type="text" class="form-control" name="fwd_target" value="{{ tgt }}" placeholder="联系人昵称或群名">
+                <button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>
+              </div>
+              {% endfor %}
+            </div>
+            <button type="button" class="btn-add btn-add-fwd-target" style="margin-top:6px;"><i class="bi bi-plus-circle"></i> 添加转发目标</button>
+            <div class="switch-row" style="margin-top:10px;margin-bottom:0;">
+              <input class="form-check-input fwd-with-source" type="checkbox" {% if rule.forward_with_source %}checked{% endif %}>
+              <label style="font-size:13px;">转发时附带来源信息 <span style="font-size:11px;color:var(--muted);font-weight:400;">（转发消息后自动补发一条"来源窗口：xxx，发送人：xxx"）</span></label>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      <button type="button" class="btn-add" id="btn-add-forward-rule" style="margin-top:4px;"><i class="bi bi-plus-circle"></i> 添加转发规则</button>
     </div>
   </div>
 
@@ -1295,7 +1482,7 @@ var svModal = (function(){
 
 $(function(){
   // ===== Summernote Init =====
-  $('#prompt, #group_welcome_msg').summernote({
+  $('#group_welcome_msg').summernote({
     height:200, lang:'zh-CN',
     toolbar:[
       ['style',['style']],['font',['bold','italic','underline','clear']],
@@ -1395,6 +1582,8 @@ $(function(){
 
   // ===== 群组专属接口：接口列表数据（Jinja2 注入，供动态添加群组行使用）=====
   var apiConfigsList = {{ config.api_configs | tojson }};
+  // ===== Prompt 列表数据（Jinja2 注入，供 prompt 下拉框和编辑器使用）=====
+  var promptsList = {{ prompts | map(attribute='name') | list | tojson }};
 
   function buildGroupApiOpts(selectedIdx){
     var s = '<option value="-1"'+(selectedIdx===-1?' selected':'')+'>默认接口</option>';
@@ -1407,9 +1596,12 @@ $(function(){
 
   $('#btn-add-group-item').click(function(){
     $('#group_container').append(
-      '<div class="list-item">'+
+      '<div class="list-item" style="flex-wrap:wrap;gap:6px;">'+
         '<input type="text" class="form-control" name="group" placeholder="群聊名称">'+
-        '<select class="form-select group-api-select" style="width:175px;flex-shrink:0;" title="该群调用的AI接口（选默认则跟随全局配置）">'+
+        '<select class="form-select group-prompt-select" style="width:145px;flex-shrink:0;" title="该群专属Prompt（空=使用全局Prompt）">'+
+          buildPromptOpts('')+
+        '</select>'+
+        '<select class="form-select group-api-select" style="width:160px;flex-shrink:0;" title="该群调用的AI接口（选默认则跟随全局配置）">'+
           buildGroupApiOpts(-1)+
         '</select>'+
         '<button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>'+
@@ -1433,15 +1625,12 @@ $(function(){
       $hint.css({background:'#FEF2F2',color:'#DC2626',border:'1px solid #FECACA'});
       $icon.attr('class','bi bi-shield-x');
       $text.text('当前为黑名单模式 — 以下用户的消息将被忽略');
-      $('#listenListLabel').text('黑名单列表');
-      $('#listenAddText').text('添加黑名单');
     } else {
       $hint.css({background:'#F0FDF4',color:'#16A34A',border:'1px solid #BBF7D0'});
       $icon.attr('class','bi bi-shield-check');
       $text.text('当前为白名单模式 — 仅监听以下用户的消息');
-      $('#listenListLabel').text('监听列表');
-      $('#listenAddText').text('添加监听');
     }
+    _updateListenMode(on); // 同步全局 Prompt 行、per-user 下拉框、按钮文字等
   });
 
   // ===== Range Slider =====
@@ -1457,7 +1646,7 @@ $(function(){
 
   // ===== Remove List Item =====
   $(document).on('click','.btn-remove-item',function(){
-    $(this).closest('.list-item, .keyword-item, .scheduled-msg-item, .scheduled-moments-item, .random-moments-item').remove();
+    $(this).closest('.list-item, .keyword-item, .scheduled-msg-item, .scheduled-moments-item, .random-moments-item, .custom-forward-item').remove();
   });
 
   // ===== 选择本地图片（调后端弹系统文件选择框）=====
@@ -1487,6 +1676,152 @@ $(function(){
     );
   });
 
+  // ===== Prompt 辅助函数 =====
+  function buildPromptOpts(selectedName) {
+    var s = '<option value=""'+(selectedName===''||!selectedName?' selected':'')+'>默认（全局）</option>';
+    promptsList.forEach(function(name){
+      var sel = (name === selectedName) ? ' selected' : '';
+      s += '<option value="'+name+'"'+sel+'>'+name+'</option>';
+    });
+    return s;
+  }
+  function buildChatApiOpts(selectedIdx) {
+    var s = '<option value="-1"'+(selectedIdx===-1?' selected':'')+'>默认接口</option>';
+    apiConfigsList.forEach(function(c,i){
+      var sel=(i===selectedIdx)?' selected':'';
+      s+='<option value="'+i+'"'+sel+'>接口'+(i+1)+': '+((c.model||'').substring(0,20))+'</option>';
+    });
+    return s;
+  }
+  function refreshAllPromptDropdowns() {
+    ['#default_prompt_select', '.chat-prompt-select', '.group-prompt-select'].forEach(function(sel){
+      $(sel).each(function(){
+        var cur = $(this).val() || '';
+        $(this).html(sel==='#default_prompt_select'
+          ? promptsList.map(function(n){return '<option value="'+n+'"'+(n===cur?' selected':'')+'>'+n+'</option>';}).join('')
+          : buildPromptOpts(cur)
+        );
+      });
+    });
+  }
+
+  // ===== Prompt Editor =====
+  var _promptCurrentOldName = '';
+
+  // 初始化：选中第一个
+  (function(){
+    var $first = $('#prompt-list .prompt-list-item:first');
+    if ($first.length) promptSelectItem($first[0]);
+  })();
+
+  function promptSelectItem(el) {
+    var $el = $(el);
+    $('.prompt-list-item').removeClass('active');
+    $el.addClass('active');
+    $('#prompt-name-input').val($el.data('name'));
+    $('#prompt-content-input').val($el.data('content'));
+    _promptCurrentOldName = $el.data('name');
+  }
+  // 列表点击
+  $(document).on('click', '.prompt-list-item', function(){ promptSelectItem(this); });
+
+  $('#btn-new-prompt').click(function(){
+    $('.prompt-list-item').removeClass('active');
+    $('#prompt-name-input').val('').focus();
+    $('#prompt-content-input').val('');
+    _promptCurrentOldName = '';
+  });
+
+  $('#btn-save-prompt').click(function(){
+    var name = $('#prompt-name-input').val().trim();
+    var content = $('#prompt-content-input').val();
+    if (!name) { svModal.error('Prompt 名称不能为空'); return; }
+    var oldName = _promptCurrentOldName;
+    $.ajax({
+      url:'/save_prompt', type:'POST', contentType:'application/json',
+      data: JSON.stringify({name:name, content:content, old_name:oldName}),
+      success: function(res) {
+        if (res.status !== 'success') { svModal.error('保存失败：'+(res.msg||'')); return; }
+        // 更新 promptsList 和 DOM
+        if (oldName && oldName !== name) {
+          var oi = promptsList.indexOf(oldName);
+          if (oi >= 0) promptsList.splice(oi, 1);
+          $('#prompt-list .prompt-list-item[data-name="'+oldName+'"]').remove();
+        }
+        if (promptsList.indexOf(name) === -1) {
+          promptsList.push(name);
+          var $ni = $('<div class="prompt-list-item" data-name="'+name+'"></div>').text(name).attr('data-content', content);
+          $('#prompt-list').append($ni);
+          promptSelectItem($ni[0]);
+        } else {
+          var $exist = $('#prompt-list .prompt-list-item[data-name="'+name+'"]');
+          $exist.attr('data-content', content).data('content', content);
+          promptSelectItem($exist[0]);
+        }
+        _promptCurrentOldName = name;
+        refreshAllPromptDropdowns();
+        svModal.success('Prompt 保存成功');
+      },
+      error: function(xhr){ svModal.error('保存出错：'+xhr.responseText); }
+    });
+  });
+
+  $('#btn-delete-prompt').click(function(){
+    var name = _promptCurrentOldName;
+    if (!name) { svModal.error('请先选中一个已保存的 Prompt'); return; }
+    if (promptsList.length <= 1) { svModal.error('不允许删除最后一个 Prompt'); return; }
+    svModal.confirm('确定删除 Prompt「'+name+'」？此操作不可恢复。', function(){
+      $.ajax({
+        url:'/delete_prompt', type:'POST', contentType:'application/json',
+        data: JSON.stringify({name:name}),
+        success: function(res) {
+          if (res.status !== 'success') { svModal.error('删除失败：'+(res.msg||'')); return; }
+          var oi = promptsList.indexOf(name);
+          if (oi >= 0) promptsList.splice(oi, 1);
+          $('#prompt-list .prompt-list-item[data-name="'+name+'"]').remove();
+          var $first = $('#prompt-list .prompt-list-item:first');
+          if ($first.length) promptSelectItem($first[0]);
+          else { $('#prompt-name-input').val(''); $('#prompt-content-input').val(''); _promptCurrentOldName=''; }
+          refreshAllPromptDropdowns();
+          svModal.success('已删除');
+        }
+      });
+    }, '删除确认', '确定删除', '取消');
+  });
+
+  // ===== Listen Tab：模式切换联动（扩展现有逻辑）=====
+  function _updateListenMode(isGlobal) {
+    if (isGlobal) {
+      $('#global-prompt-row').show();
+      $('.listen-extra').hide();
+      $('#listenListLabel').html('黑名单列表');
+    } else {
+      $('#global-prompt-row').hide();
+      $('.listen-extra').show();
+      $('#listenListLabel').html('监听列表 <span style="font-size:11px;color:var(--muted);font-weight:400;">（白名单模式：可为每个用户设置专属 Prompt 和接口）</span>');
+    }
+    $('#listenAddText').text(isGlobal ? '添加黑名单' : '添加监听');
+  }
+  // 页面加载时初始化
+  _updateListenMode($('#AllListen_switch').is(':checked'));
+
+  // ===== 新增监听条目 =====
+  $('#btn-add-listen-item').click(function(){
+    var isGlobal = $('#AllListen_switch').is(':checked');
+    var extraHtml = isGlobal ? '' :
+      '<div class="listen-extra" style="display:flex;gap:6px;flex-wrap:wrap;">'+
+        '<select class="form-select chat-prompt-select" style="width:145px;flex-shrink:0;" title="专属Prompt">'+buildPromptOpts('')+'</select>'+
+        '<select class="form-select chat-api-select" style="width:160px;flex-shrink:0;" title="专属接口">'+buildChatApiOpts(-1)+'</select>'+
+      '</div>';
+    $('#listen_container').append(
+      '<div class="list-item listen-item" style="flex-wrap:wrap;gap:6px;">'+
+      '<input type="text" class="form-control" name="listen_list" placeholder="联系人昵称" style="min-width:120px;">'+
+      extraHtml+
+      '<button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>'+
+      '</div>'
+    );
+  });
+
   // ===== Add Keyword =====
   $('#btn-add-keyword').click(function(){
     $('#keyword_container').append(
@@ -1496,6 +1831,89 @@ $(function(){
       '<button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>'+
       '</div>'
     );
+  });
+
+  // ===== Custom Forward: 工具函数 =====
+  function _fwdListItem(nameAttr, placeholder){
+    return '<div class="list-item" style="margin-bottom:6px;">'+
+      '<input type="text" class="form-control" name="'+nameAttr+'" placeholder="'+placeholder+'">'+
+      '<button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>'+
+      '</div>';
+  }
+  function _fwdSyncType($item){
+    var t = $item.find('.fwd-type-select').val();
+    $item.find('.fwd-keyword-block').toggle(t === 'keyword');
+    $item.find('.fwd-sender-block').toggle(t === 'sender');
+  }
+
+  // 页面加载时初始化已有规则的条件显示
+  $('.custom-forward-item').each(function(){ _fwdSyncType($(this)); });
+
+  // 类型切换事件
+  $(document).on('change', '.fwd-type-select', function(){
+    _fwdSyncType($(this).closest('.custom-forward-item'));
+  });
+
+  // 添加来源
+  $(document).on('click', '.btn-add-fwd-source', function(){
+    $(this).prev('.fwd-source-list').append(_fwdListItem('fwd_source', '联系人昵称或群名'));
+  });
+  // 添加关键词
+  $(document).on('click', '.btn-add-fwd-kw', function(){
+    $(this).prev('.fwd-kw-list').append(_fwdListItem('fwd_keyword', '关键词'));
+  });
+  // 添加发送人
+  $(document).on('click', '.btn-add-fwd-sender', function(){
+    $(this).prev('.fwd-sender-list').append(_fwdListItem('fwd_sender', '发送人昵称'));
+  });
+  // 添加转发目标
+  $(document).on('click', '.btn-add-fwd-target', function(){
+    $(this).prev('.fwd-target-list').append(_fwdListItem('fwd_target', '联系人昵称或群名'));
+  });
+
+  // 添加新转发规则
+  $('#btn-add-forward-rule').click(function(){
+    var newId = Math.random().toString(36).substr(2,8);
+    var html =
+      '<div class="custom-forward-item" data-rule-id="'+newId+'">'+
+        '<div class="d-flex align-items-center justify-content-between mb-3">'+
+          '<span style="font-size:13px;font-weight:600;color:var(--primary);">转发规则</span>'+
+          '<button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>'+
+        '</div>'+
+        '<div class="mb-3">'+
+          '<label class="cfg-label">监听来源 <span style="font-size:11px;color:var(--primary);font-weight:400;">（填入微信联系人昵称或群名，可添加多个）</span></label>'+
+          '<div class="fwd-source-list"></div>'+
+          '<button type="button" class="btn-add btn-add-fwd-source" style="margin-top:6px;"><i class="bi bi-plus-circle"></i> 添加来源</button>'+
+        '</div>'+
+        '<div class="mb-3">'+
+          '<label class="cfg-label">转发类型 <span style="font-size:11px;color:var(--muted);font-weight:400;">（选择消息触发转发的条件类型）</span></label>'+
+          '<select class="form-select fwd-type-select" style="max-width:260px;">'+
+            '<option value="keyword">关键词转发</option>'+
+            '<option value="all">无差别转发</option>'+
+            '<option value="sender">固定发送人转发</option>'+
+          '</select>'+
+        '</div>'+
+        '<div class="fwd-conditional-block fwd-keyword-block mb-3" style="display:block;">'+
+          '<label class="cfg-label">关键词列表 <span style="font-size:11px;color:var(--primary);font-weight:400;">（消息内容包含任意一个关键词即触发转发）</span></label>'+
+          '<div class="fwd-kw-list"></div>'+
+          '<button type="button" class="btn-add btn-add-fwd-kw" style="margin-top:6px;"><i class="bi bi-plus-circle"></i> 添加关键词</button>'+
+        '</div>'+
+        '<div class="fwd-conditional-block fwd-sender-block mb-3">'+
+          '<label class="cfg-label">发送人列表 <span style="font-size:11px;color:var(--primary);font-weight:400;">（填入微信昵称，仅该发送人的消息才触发转发）</span></label>'+
+          '<div class="fwd-sender-list"></div>'+
+          '<button type="button" class="btn-add btn-add-fwd-sender" style="margin-top:6px;"><i class="bi bi-plus-circle"></i> 添加发送人</button>'+
+        '</div>'+
+        '<div class="mb-1">'+
+          '<label class="cfg-label">转发目标 <span style="font-size:11px;color:var(--primary);font-weight:400;">（填入联系人昵称或群名，可添加多个，每次转发间隔 1 秒）</span></label>'+
+          '<div class="fwd-target-list"></div>'+
+          '<button type="button" class="btn-add btn-add-fwd-target" style="margin-top:6px;"><i class="bi bi-plus-circle"></i> 添加转发目标</button>'+
+          '<div class="switch-row" style="margin-top:10px;margin-bottom:0;">'+
+            '<input class="form-check-input fwd-with-source" type="checkbox">'+
+            '<label style="font-size:13px;">转发时附带来源信息 <span style="font-size:11px;color:var(--muted);font-weight:400;">（转发消息后自动补发一条"来源窗口：xxx，发送人：xxx"）</span></label>'+
+          '</div>'+
+        '</div>'+
+      '</div>';
+    $('#custom_forward_container').append(html);
   });
 
   // ===== Add Scheduled Msg in Task =====
@@ -1825,9 +2243,10 @@ $(function(){
       group_keyword_switch:$('#group_keyword_switch').is(':checked'),
       group_keyword_at_only:$('#group_keyword_at_only').is(':checked'),
       admin:$('#admin').val(),
-      prompt:$('#prompt').summernote('code'),
       group_welcome_msg:$('#group_welcome_msg').summernote('code'),
-      listen_list:[], group:[], group_api_map:{}, new_friend_msg:[],
+      default_prompt:$('#default_prompt_select').val()||'默认',
+      listen_list:[], group:[], group_api_map:{}, group_prompt_map:{}, new_friend_msg:[],
+      chat_prompt_map:{}, chat_api_map:{},
       group_welcome_random:parseFloat($('#group_welcome_random').val()),
       keyword_dict:{},
       scheduled_msg_switch:$('#scheduled_msg_switch').is(':checked'),
@@ -1851,16 +2270,31 @@ $(function(){
       chat_image_recognition_switch:$('#chat_image_recognition_switch').is(':checked'),
       chat_image_recognition_api:parseInt($('#chat_image_recognition_api').val())||0,
       group_image_recognition_switch:$('#group_image_recognition_switch').is(':checked'),
-      group_image_recognition_api:parseInt($('#group_image_recognition_api').val())||0
+      group_image_recognition_api:parseInt($('#group_image_recognition_api').val())||0,
+      custom_forward_switch:$('#custom_forward_switch').is(':checked'),
+      custom_forward_list:[]
     };
-    $('input[name="listen_list"]').each(function(){ if($(this).val()) configData.listen_list.push($(this).val()); });
-    // 群组：收集名称列表 + 专属接口映射
+    // 私聊监听列表 + 白名单模式下的专属 prompt/api 映射
+    $('#listen_container .listen-item').each(function(){
+      var uname = $(this).find('input[name="listen_list"]').val().trim();
+      if (!uname) return;
+      configData.listen_list.push(uname);
+      if (!$('#AllListen_switch').is(':checked')) {
+        var pv = $(this).find('.chat-prompt-select').val();
+        if (pv) configData.chat_prompt_map[uname] = pv;
+        var av = parseInt($(this).find('.chat-api-select').val());
+        if (!isNaN(av) && av >= 0) configData.chat_api_map[uname] = av;
+      }
+    });
+    // 群组：收集名称列表 + 专属接口映射 + 专属 prompt 映射
     $('#group_container .list-item').each(function(){
       var name=$(this).find('input[name="group"]').val().trim();
       if(!name) return;
       configData.group.push(name);
       var idx=parseInt($(this).find('.group-api-select').val());
       if(!isNaN(idx) && idx>=0){ configData.group_api_map[name]=idx; }
+      var gpv=$(this).find('.group-prompt-select').val();
+      if(gpv){ configData.group_prompt_map[name]=gpv; }
     });
     $('input[name="new_friend_msg"]').each(function(){ if($(this).val()) configData.new_friend_msg.push($(this).val()); });
     var keys=$('input[name="keyword_key"]'), vals=$('textarea[name="keyword_value"]');
@@ -1940,6 +2374,23 @@ $(function(){
         images:images,
         privacy:$m.find('.moments-privacy').val(),
         tags:tags
+      });
+    });
+    // 收集自定义转发规则列表
+    $('.custom-forward-item').each(function(){
+      var $r=$(this), sources=[], keywords=[], senders=[], targets=[];
+      $r.find('input[name="fwd_source"]').each(function(){ if($(this).val().trim()) sources.push($(this).val().trim()); });
+      $r.find('input[name="fwd_keyword"]').each(function(){ if($(this).val().trim()) keywords.push($(this).val().trim()); });
+      $r.find('input[name="fwd_sender"]').each(function(){ if($(this).val().trim()) senders.push($(this).val().trim()); });
+      $r.find('input[name="fwd_target"]').each(function(){ if($(this).val().trim()) targets.push($(this).val().trim()); });
+      configData.custom_forward_list.push({
+        id: $r.data('rule-id'),
+        sources: sources,
+        type: $r.find('.fwd-type-select').val(),
+        keywords: keywords,
+        senders: senders,
+        targets: targets,
+        forward_with_source: $r.find('.fwd-with-source').is(':checked')
       });
     });
     $.ajax({

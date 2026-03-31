@@ -1,10 +1,10 @@
 # 🤖 Siver WX机器人 (wxbot_plus)
 
-[![Version](https://img.shields.io/badge/version-V4.6.9-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
+[![Version](https://img.shields.io/badge/version-V4.6.10-blue.svg)](https://github.com/SiverKing/SiverWXbot_plus)
 [![Python](https://img.shields.io/badge/python-3.8+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-> 一个功能完整、架构清晰的WX机器人框架，支持多 AI 平台接入、对话记忆、灵活的监听模式、丰富的管理命令和智能的消息处理流程。
+> 一个功能完整、架构清晰的WX机器人框架，支持多 AI 平台接入、多份 Prompt 管理、对话记忆、自定义规则转发、灵活的监听模式、丰富的管理命令和智能的消息处理流程。
 
 **作者**: [Siver](https://www.siver.top)
 
@@ -14,16 +14,35 @@
 
 ## ✨ 核心特性
 
-### 🧠 对话记忆（新）
+### 📝 多 Prompt 管理（新）
+- **多份独立存储** - Prompt 从配置文件中独立出来，存储为 `config/prompt/*.md` 文件，每个文件一份 Prompt，支持在面板内增删改
+- **灵活的差异化配置** - 可为每个群组、每个白名单用户单独绑定不同 Prompt，实现"客服群用客服 Prompt、销售群用销售 Prompt"等场景
+- **私聊白名单专属接口 + Prompt** - 白名单模式下，每个监听用户可同时绑定专属 AI 接口和专属 Prompt，与群组的独立接口能力对齐
+- **全局默认 Prompt** - 全局监听（黑名单）模式下选择一个全局 Prompt，未单独绑定 Prompt 的用户/群组自动使用全局默认
+- **文件导入** - 直接往 `config/prompt/` 文件夹放 `.md` 文件，保存配置后刷新面板即可看到，无需在面板操作
+- **自动迁移** - 旧版 `config.json` 中的 `prompt` 字段在首次启动时自动迁移到 `config/prompt/默认.md`，零感知升级
+
+### 🔀 自定义规则转发（新）
+- **监听来源灵活配置** - 每条转发规则可设置多个监听来源（联系人或群聊）
+- **三种触发类型**
+  - **关键词转发** - 消息内容包含任意关键词时触发
+  - **固定发送人转发** - 指定人发送的消息才转发
+  - **无差别转发** - 所有接收到的消息均转发
+- **多目标转发** - 每条规则可设置多个转发目标，逐一转发，每次转发间隔 1 秒
+- **附带来源信息** - 可选择是否在转发时附带"来源窗口"和"发送人"信息
+- **不影响原有功能** - 转发在普通 AI 回复处理完成后执行，已在监听列表中的来源无需重复添加
+
+### 🧠 对话记忆
 - **全窗口记忆存储** - 机器人运行时将所有收发消息按聊天窗口独立存档
 - **AI 上下文携带** - 调用 AI 时自动带入最近 N 条历史消息，实现连续对话
-- **灵活配置** - 最大存储条数（50~2000）、AI 带入条数均可单独配置
+- **群聊区分发送人** - 群聊历史消息格式为 `[时间] 发送人: 内容`，AI 可准确识别不同人的发言
+- **灵活配置** - 最大存储条数、AI 带入条数均可单独配置
 - **记忆管理面板** - 在 Web 面板中可视化查看/删除各窗口的记忆记录，气泡式消息展示
 
 ### 🎯 多 AI 平台支持
 - **DusAPI** ⭐ 推荐 - 兼容 Claude、GPT 等全系模型，国内稳定低延迟，一个 Key 搞定所有需求
   - 官网：[dusapi.com](https://dusapi.com)
-  - **自动重试**：自动失败重试机制
+  - **自动重试**：梯度重试机制（2/4/8/16/32 秒），5 次失败后报错
 - **OpenAI SDK** - 兼容所有 OpenAI 格式的 API（DeepSeek、通义千问等）
   - 支持流式和非流式输出
   - 支持思维链内容（reasoning_content）
@@ -32,8 +51,8 @@
 - **Coze（扣子）** - 使用官方 cozepy SDK
 
 ### 🔄 双监听模式
-- **白名单模式** - 精准监听指定用户和群组
-- **黑名单模式** - 全局监听所有消息，动态管理会话列表
+- **白名单模式** - 精准监听指定用户和群组；每个用户可绑定专属 AI 接口和专属 Prompt
+- **黑名单模式** - 全局监听所有消息，动态管理会话列表；全局共用一个 Prompt，接口使用全局默认配置
 
 ### 💬 智能消息处理
 - **关键词回复** - 支持私聊和群聊关键词自动回复
@@ -47,7 +66,8 @@
 - **@ 回复模式** - 支持仅被 @ 时才回复
 - **群关键词回复** - 不受 @ 限制的关键词回复
 - **欢迎概率配置** - 可设置欢迎语触发概率
-- **群组专属 AI 接口（新）** - 每个监听群聊可单独绑定不同的 AI 接口，实现一个面板同时管理多个群、调用不同模型，互不影响；未绑定的群自动使用全局默认接口
+- **群组专属 AI 接口** - 每个监听群聊可单独绑定不同的 AI 接口
+- **群组专属 Prompt** - 每个群聊可单独绑定不同的 Prompt，与接口独立配置
 
 ### 🤝 新好友管理
 - **自动通过好友请求** - 批量处理新好友申请
@@ -66,41 +86,34 @@
 - **独立开关** - 每条定时任务可单独启用/禁用
 - **定时启停** - 设置机器人每日自动启动和停止时间
 
-### 🌸 朋友圈功能（新）
+### 🌸 朋友圈功能
 
 #### 随机点赞（活跃账号）
 - **自动随机点赞** - 在设定的随机时间间隔内自动打开朋友圈，对当前第一条朋友圈点赞后关闭
 - **灵活间隔配置** - 最小 1 分钟、最大 1440 分钟（24 小时），每次执行后重新随机生成下一次间隔
 - **拟人化操作** - 每个动作之间有 1~5 秒随机延时，模拟真实用户行为
-- **默认关闭** - 需手动在面板开启，不影响原有功能
 
-#### 随机定时发布朋友圈（新）
+#### 随机定时发布朋友圈
 - **时间窗口随机发布** - 设定起止时间（如 09:00~13:00），机器人在窗口内随机挑选时刻发布，避免固定规律被识别
-- **三种周期模式**
-  - **每天** - 每天必发，时间随机
-  - **每周** - 设置本周随机抽几天（1~7），周初自动随机选定，其余天跳过；例如设 5，则随机挑 5 天发布
-  - **每月** - 设置本月随机抽几天（1~本月天数），月初自动随机选定
-- **内容与隐私** - 同定时朋友圈，支持图文混发、三级隐私控制
-- **独立开关** - 每条任务可单独启用/禁用，与定时朋友圈互相独立
+- **三种周期模式**：每天 / 每周随机抽 N 天 / 每月随机抽 N 天
+- **内容与隐私** - 支持图文混发、三级隐私控制
 
 #### 定时发送朋友圈
 - **全自动定时发圈** - 与定时消息完全相同的时间控制自由度（每天/每周/每月/单次/自定义日期）
-- **图文混发** - 支持纯文字、纯图片（最多9张）、图文混合，文字内容支持换行
-- **三级隐私控制** - 公开 / 白名单（仅标签内的人可见）/ 黑名单（屏蔽标签内的人）
-- **独立开关** - 每条任务可单独启用/禁用
-- **间隔延时** - 打开朋友圈 → 随机延时 2~5s → 发布 → 随机延时 2~5s → 关闭，拟人化操作
+- **图文混发** - 支持纯文字、纯图片（最多9张）、图文混合
+- **三级隐私控制** - 公开 / 白名单 / 黑名单
 
-### 🖼️ 图片识别（新）
+### 🖼️ 图片识别
 - **私聊 & 群组独立开关** - 私聊和群组各有一个图片识别总开关，互不影响
-- **接口自由选择** - 开启后可从已配置的接口中选择用哪个接口做识别（支持 claude-sonnet-4-6、gpt-5 等视觉模型）
+- **接口自由选择** - 开启后可从已配置的接口中选择用哪个接口做识别
 - **直接图片消息** - 用户直接发送图片，机器人自动下载并调用多模态接口描述图片内容后回复
 - **引用图片消息** - 用户引用带图片的消息，自动提取图片路径与文字内容，一并传给识别接口处理
 - **识别关闭时零开销** - 关闭开关后不仅不回复，连图片下载也跳过，节省资源
 - **须使用 DusAPI** - 图片识别需使用支持视觉的模型（如 claude-sonnet-4-6、gpt-5 系列），通过 [DusAPI](https://dusapi.com) 调用
 
-### 📂 图片路径快速选择（新）
+### 📂 图片路径快速选择
 - 新好友打招呼消息、定时消息内容、定时朋友圈图片三处均支持 **📁 选择图片** 按钮
-- 点击后弹出系统原生文件选择框，选中图片后自动将完整本地路径填入输入框，无需手动输入路径
+- 点击后弹出系统原生文件选择框，选中图片后自动将完整本地路径填入输入框
 
 ### 🛠️ 管理命令系统
 通过WX消息发送命令，实时管理机器人：
@@ -110,11 +123,12 @@
 - 记忆管理：查看记忆状态、开关对话记忆
 - 延迟管理：查看延迟配置、开关回复延迟
 - 接口管理：查看接口列表、切换当前使用的接口
-- AI 设定：修改系统提示词
+- AI 设定：查看/修改默认 Prompt（操作 `config/prompt/默认.md` 文件）
 - 系统管理：更新配置、查看状态、查看版本
 
 ### 🌐 Web 管理界面
 - **状态面板** - 首页实时展示运行状态、消息统计、在线时长等关键指标，5 秒自动刷新
+- **Prompt 管理** - 左侧列表 + 右侧编辑器两栏布局，支持新建/编辑/删除 Prompt；也可直接在 `config/prompt/` 放文件后刷新导入
 - **记忆管理** - 三栏式记忆查看器（wx号→窗口→消息气泡），支持删除
 - **全新 UI** - 侧边栏导航 + 分类标签页，配置一目了然
 - **用户认证** - 账密从代码分离到 `admin.json`，修改无需改代码
@@ -173,6 +187,7 @@ pip install -r requirements.txt
 
 4. **配置机器人**
    - 首次运行会自动创建 `config.json` 配置文件
+   - 首次运行会自动创建 `config/prompt/` 目录及 `默认.md` 文件
    - 根据需求修改配置（详见配置说明）
 
 5. **配置邮件告警（可选）**
@@ -197,7 +212,6 @@ python web_server.py
         {"sdk": "DusAPI", "key": "your-api-key", "url": "https://api.dusapi.com", "model": "claude-sonnet-4-6"}
     ],
     "api_index": 0,
-    "prompt": "你是一个 AI 助手，请根据用户的问题给出回答",
     "admin": "文件传输助手",
     "AllListen_switch": false,
     "listen_list": ["用户1", "用户2"],
@@ -206,6 +220,17 @@ python web_server.py
         "群聊1": 0,
         "群聊2": 1
     },
+    "group_prompt_map": {
+        "群聊1": "客服助手",
+        "群聊2": "销售助手"
+    },
+    "chat_prompt_map": {
+        "张三": "客服助手"
+    },
+    "chat_api_map": {
+        "张三": 1
+    },
+    "default_prompt": "默认",
     "group_switch": true,
     "group_reply_at": true,
     "group_welcome": true,
@@ -221,6 +246,18 @@ python web_server.py
         "关键词1": "回复内容1",
         "关键词2": "回复内容2"
     },
+    "custom_forward_switch": false,
+    "custom_forward_list": [
+        {
+            "id": "abc123",
+            "sources": ["群聊1", "张三"],
+            "type": "keyword",
+            "keywords": ["重要", "紧急"],
+            "senders": [],
+            "targets": ["李四", "群聊2"],
+            "forward_with_source": true
+        }
+    ],
     "scheduled_msg_switch": true,
     "scheduled_msg_list": [
         {
@@ -235,38 +272,12 @@ python web_server.py
         }
     ],
     "scheduled_moments_switch": false,
-    "scheduled_moments_list": [
-        {
-            "id": "xyz456",
-            "enabled": true,
-            "time": "10:00",
-            "repeat_type": "daily",
-            "weekdays": [],
-            "dates": [],
-            "text": "今天天气真好，适合出去走走～",
-            "images": ["C:\\图片\\1.png", "C:\\图片\\2.png"],
-            "privacy": "public",
-            "tags": []
-        }
-    ],
+    "scheduled_moments_list": [],
     "moments_like_switch": false,
     "moments_like_min": 60,
     "moments_like_max": 120,
     "random_moments_switch": false,
-    "random_moments_list": [
-        {
-            "id": "rm001",
-            "enabled": true,
-            "time_start": "09:00",
-            "time_end": "13:00",
-            "repeat_type": "weekly",
-            "random_days_count": 5,
-            "text": "随机时间发的朋友圈～",
-            "images": [],
-            "privacy": "public",
-            "tags": []
-        }
-    ],
+    "random_moments_list": [],
     "everyday_start_stop_bot_switch": false,
     "everyday_start_bot_time": "08:00",
     "everyday_stop_bot_time": "23:00",
@@ -283,113 +294,138 @@ python web_server.py
 }
 ```
 
+> ⚠️ **注意**：旧版本中 `config.json` 里的 `prompt` 字段已迁移到 `config/prompt/默认.md` 文件，首次运行新版本会自动迁移，无需手动操作。
+
 ### 配置项说明
 
 | 配置项 | 类型 | 默认值 | 说明 |
 |--------|------|--------|------|
-| `api_configs` | array | — | AI 接口配置列表，每项含 `sdk`/`key`/`url`/`model` 四个字段 |
-| `api_index` | integer | `0` | 当前使用的接口索引（0-based），通过管理命令或面板切换 |
-| `prompt` | string | — | AI 系统提示词 |
+| `api_configs` | array | — | AI 接口配置列表，每项含 `sdk`/`key`/`url`/`model` |
+| `api_index` | integer | `0` | 当前使用的接口索引（0-based） |
 | `admin` | string | `"文件传输助手"` | 管理员昵称，可发送管理命令 |
-| `AllListen_switch` | boolean | `false` | `false`=白名单模式，`true`=黑名单模式 |
+| `AllListen_switch` | boolean | `false` | `false`=白名单模式，`true`=黑名单（全局）模式 |
 | `listen_list` | array | `[]` | 白名单/黑名单用户列表 |
 | `group` | array | `[]` | 监听的群聊列表 |
-| `group_api_map` | object | `{}` | 群组专属 AI 接口映射，格式 `{"群名": 接口索引}`，索引对应 `api_configs` 数组（0-based）；未配置的群使用 `api_index` 指定的默认接口 |
+| `group_api_map` | object | `{}` | 群组专属接口映射，格式 `{"群名": 接口索引}`；未配置的群使用默认接口 |
+| `group_prompt_map` | object | `{}` | 群组专属 Prompt 映射，格式 `{"群名": "Prompt文件名"}`；未配置的群使用 `default_prompt` |
+| `chat_prompt_map` | object | `{}` | 私聊白名单用户专属 Prompt 映射，格式 `{"用户昵称": "Prompt文件名"}` |
+| `chat_api_map` | object | `{}` | 私聊白名单用户专属接口映射，格式 `{"用户昵称": 接口索引}` |
+| `default_prompt` | string | `"默认"` | 全局默认 Prompt 文件名（不含 `.md`），对应 `config/prompt/{名称}.md` |
 | `group_switch` | boolean | `false` | 群机器人总开关 |
 | `group_reply_at` | boolean | `false` | 是否仅在被 @ 时回复群消息 |
 | `group_welcome` | boolean | `false` | 是否开启群新人欢迎语 |
 | `group_welcome_random` | float | `1.0` | 欢迎语触发概率（0.0-1.0） |
 | `group_welcome_msg` | string | — | 群新人欢迎语内容 |
 | `new_friend_switch` | boolean | `false` | 是否自动通过新好友请求 |
-| `new_friend_reply_switch` | boolean | `false` | 通过新好友后是否自动发打招呼消息 |
-| `new_friend_msg` | array | `[]` | 打招呼消息列表，支持文字或图片绝对路径（自动识别） |
+| `new_friend_reply_switch` | boolean | `false` | 通过新好友后是否自动打招呼 |
+| `new_friend_msg` | array | `[]` | 打招呼消息列表，支持文字或图片绝对路径 |
 | `chat_keyword_switch` | boolean | `false` | 是否开启私聊关键词回复 |
 | `group_keyword_switch` | boolean | `false` | 是否开启群聊关键词回复 |
-| `group_keyword_at_only` | boolean | `false` | 群聊关键词回复是否仅在被 @ 时触发（需同时开启 `group_keyword_switch`） |
+| `group_keyword_at_only` | boolean | `false` | 群聊关键词回复是否仅在被 @ 时触发 |
 | `keyword_dict` | object | `{}` | 关键词→回复内容映射 |
+| `custom_forward_switch` | boolean | `false` | 自定义规则转发总开关 |
+| `custom_forward_list` | array | `[]` | 自定义转发规则列表，详见下方说明 |
 | `scheduled_msg_switch` | boolean | `false` | 是否开启定时消息 |
 | `scheduled_msg_list` | array | `[]` | 定时消息任务列表，详见下方说明 |
 | `scheduled_moments_switch` | boolean | `false` | 是否开启定时朋友圈 |
-| `scheduled_moments_list` | array | `[]` | 定时朋友圈任务列表，详见下方说明 |
-| `moments_like_switch` | boolean | `false` | 是否开启随机朋友圈点赞（默认关闭） |
+| `scheduled_moments_list` | array | `[]` | 定时朋友圈任务列表 |
+| `moments_like_switch` | boolean | `false` | 是否开启随机朋友圈点赞 |
 | `moments_like_min` | integer | `60` | 随机点赞最小间隔（分钟，1~1440） |
-| `moments_like_max` | integer | `120` | 随机点赞最大间隔（分钟，≥min，最大 1440 = 24 小时） |
+| `moments_like_max` | integer | `120` | 随机点赞最大间隔（分钟，≥min） |
 | `random_moments_switch` | boolean | `false` | 是否开启随机定时朋友圈 |
-| `random_moments_list` | array | `[]` | 随机定时朋友圈任务列表，详见下方说明 |
+| `random_moments_list` | array | `[]` | 随机定时朋友圈任务列表 |
 | `everyday_start_stop_bot_switch` | boolean | `false` | 是否开启每日定时启停机器人 |
 | `everyday_start_bot_time` | string | `"08:00"` | 每日自动启动时间（格式 `HH:MM`） |
 | `everyday_stop_bot_time` | string | `"23:00"` | 每日自动停止时间（格式 `HH:MM`） |
-| `memory_switch` | boolean | `true` | 是否开启对话记忆功能 |
-| `memory_max_count` | integer | `500` | 单窗口最多存储的消息条数（50~2000） |
-| `memory_context_count` | integer | `100` | AI 请求时带入的历史消息条数（50~上限） |
-| `reply_delay_switch` | boolean | `true` | 是否启用发送延迟（模拟人工操作），关闭后立即发送 |
+| `memory_switch` | boolean | `true` | 是否开启对话记忆 |
+| `memory_max_count` | integer | `500` | 单窗口最多存储的消息条数 |
+| `memory_context_count` | integer | `100` | AI 请求时带入的历史消息条数 |
+| `reply_delay_switch` | boolean | `true` | 是否启用发送延迟（模拟人工操作） |
 | `reply_delay_min` | integer | `1` | 发送延迟最小秒数（1~600） |
-| `reply_delay_max` | integer | `5` | 发送延迟最大秒数（1~600），实际延迟为 min~max 间的随机整数 |
-| `chat_image_recognition_switch` | boolean | `false` | 是否开启私聊图片识别；开启后直接发送的图片和引用图片均会调用 AI 识别并回复，关闭则跳过下载和识别 |
-| `chat_image_recognition_api` | integer | `0` | 私聊图片识别使用的接口索引（0-based），对应 `api_configs` 数组；须选择支持视觉的模型（如 claude-sonnet-4-6、gpt-5） |
-| `group_image_recognition_switch` | boolean | `false` | 是否开启群组图片识别；逻辑同私聊，与每群的专属接口（`group_api_map`）相互独立 |
-| `group_image_recognition_api` | integer | `0` | 群组图片识别使用的接口索引（0-based），须选择支持视觉的模型 |
+| `reply_delay_max` | integer | `5` | 发送延迟最大秒数（1~600） |
+| `chat_image_recognition_switch` | boolean | `false` | 是否开启私聊图片识别 |
+| `chat_image_recognition_api` | integer | `0` | 私聊图片识别使用的接口索引（须选择支持视觉的模型） |
+| `group_image_recognition_switch` | boolean | `false` | 是否开启群组图片识别 |
+| `group_image_recognition_api` | integer | `0` | 群组图片识别使用的接口索引（须选择支持视觉的模型） |
+
+### Prompt 文件说明
+
+Prompt 存储于 `config/prompt/` 文件夹，每个 `.md` 文件即一份 Prompt，文件名即 Prompt 名称。
+
+```
+config/prompt/
+├── 默认.md          ← 全局默认 Prompt，首次运行自动创建
+├── 客服助手.md
+└── 销售助手.md
+```
+
+**使用方式**：
+- 在面板「Prompt 管理」页编辑（左侧选择，右侧编辑内容，点保存）
+- 或直接在文件夹中新建 `.md` 文件，保存配置后刷新面板即可看到
+- 在「群组管理」「私聊监听」页的每个条目后方的下拉框中选择要绑定的 Prompt
+
+**优先级**：`群组/用户专属 Prompt` > `default_prompt（全局默认）` > 空字符串
+
+### 自定义转发规则（custom_forward_list）字段说明
+
+每条转发规则对象包含以下字段：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | string | 规则唯一 ID（自动生成） |
+| `sources` | array | 监听来源列表，支持多个联系人昵称或群聊名称 |
+| `type` | string | 触发类型：`keyword`=关键词触发 / `all`=无差别转发 / `sender`=固定发送人触发 |
+| `keywords` | array | `type=keyword` 时使用，消息内容包含任意一个关键词即触发 |
+| `senders` | array | `type=sender` 时使用，消息发送人匹配时触发 |
+| `targets` | array | 转发目标列表，支持多个联系人昵称或群聊名称，每次转发间隔 1 秒 |
+| `forward_with_source` | boolean | 是否在转发时附带来源信息（"来源窗口：xxx，发送人：xxx"） |
 
 ### 定时任务（scheduled_msg_list）字段说明
-
-每个定时任务对象包含以下字段：
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `id` | string | 任务唯一 ID（自动生成） |
 | `enabled` | boolean | 是否启用该任务 |
-| `targets` | array | 发送目标列表，支持多个用户/群聊名称（**群发**） |
+| `targets` | array | 发送目标列表，支持多个用户/群聊名称（群发） |
 | `time` | string | 发送时间，格式 `HH:MM` |
 | `repeat_type` | string | 重复类型：`once`/`daily`/`weekly`/`monthly`/`custom` |
 | `weekdays` | array | `weekly` 时使用，填写星期几（1=周一…7=周日） |
 | `dates` | array | `monthly` 时填每月几号；`once`/`custom` 时填日期字符串（如 `"2026-03-20"`） |
-| `msgs` | array | 消息内容列表，支持**文字**或**图片绝对路径**（自动识别） |
+| `msgs` | array | 消息内容列表，支持文字或图片绝对路径（自动识别） |
 
 ### 定时朋友圈任务（scheduled_moments_list）字段说明
-
-每个定时朋友圈任务对象包含以下字段：
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `id` | string | 任务唯一 ID（自动生成） |
 | `enabled` | boolean | 是否启用该任务 |
 | `time` | string | 发布时间，格式 `HH:MM` |
-| `repeat_type` | string | 重复类型：`once`/`daily`/`weekly`/`monthly`/`custom`（同定时消息） |
+| `repeat_type` | string | 重复类型：`once`/`daily`/`weekly`/`monthly`/`custom` |
 | `weekdays` | array | `weekly` 时使用，填写星期几（1=周一…7=周日） |
-| `dates` | array | `monthly` 时填每月几号；`once`/`custom` 时填日期字符串（如 `"2026-03-20"`） |
-| `text` | string | 朋友圈文字内容，支持换行，可为空（但文字和图片至少有一项） |
-| `images` | array | 本地图片绝对路径列表，最多 **9 张**，可为空 |
+| `dates` | array | `monthly` 时填每月几号；`once`/`custom` 时填日期字符串 |
+| `text` | string | 朋友圈文字内容，可为空（文字和图片至少有一项） |
+| `images` | array | 本地图片绝对路径列表，最多 9 张，可为空 |
 | `privacy` | string | 隐私设置：`public`=公开 / `whitelist`=白名单 / `blacklist`=黑名单 |
-| `tags` | array | 隐私标签列表，`privacy` 非 `public` 时生效；**白名单**=仅这些标签的人可见；**黑名单**=屏蔽这些标签的人 |
-
-> **注意**：需要在手机端确认微信朋友圈功能已开启，否则 `wx.Moments()` 返回 `None` 并跳过发送。
+| `tags` | array | 隐私标签列表，`privacy` 非 `public` 时生效 |
 
 ### 随机定时朋友圈任务（random_moments_list）字段说明
-
-每个随机定时朋友圈任务对象包含以下字段：
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `id` | string | 任务唯一 ID（自动生成） |
 | `enabled` | boolean | 是否启用该任务 |
-| `time_start` | string | 时间窗口开始，格式 `HH:MM`（如 `"09:00"`） |
-| `time_end` | string | 时间窗口结束，格式 `HH:MM`（如 `"13:00"`）；机器人在窗口内随机选一个时刻发布 |
-| `repeat_type` | string | 重复类型：`daily`=每天 / `weekly`=每周 / `monthly`=每月 |
-| `random_days_count` | integer | 每周/每月随机抽取的发送天数（`weekly` 时 1~7；`monthly` 时 1~本月天数）；`daily` 模式下该字段忽略 |
-| `text` | string | 朋友圈文字内容，支持换行，可为空（但文字和图片至少有一项） |
-| `images` | array | 本地图片绝对路径列表，最多 **9 张**，可为空 |
-| `privacy` | string | 隐私设置：`public`=公开 / `whitelist`=白名单 / `blacklist`=黑名单 |
-| `tags` | array | 隐私标签列表，`privacy` 非 `public` 时生效 |
-
-**调度逻辑说明：**
-- `weekly` 模式：每周一开始时随机从 1~7 中抽取 `random_days_count` 天，缓存整周，本周内固定不变
-- `monthly` 模式：每月 1 日开始时随机从 1~本月天数 中抽取 `random_days_count` 天，缓存整月
-- 确定今天为发送日后，在 `[time_start, time_end]` 窗口内随机选取一个时刻（精确到秒）触发发布
-- 每天每任务最多触发一次，触发后当天不再重复
+| `time_start` | string | 时间窗口开始，格式 `HH:MM` |
+| `time_end` | string | 时间窗口结束，格式 `HH:MM` |
+| `repeat_type` | string | `daily`=每天 / `weekly`=每周 / `monthly`=每月 |
+| `random_days_count` | integer | 每周/每月随机抽取的发送天数（`weekly` 时 1~7；`monthly` 时 1~本月天数） |
+| `text` | string | 朋友圈文字内容 |
+| `images` | array | 本地图片绝对路径列表，最多 9 张 |
+| `privacy` | string | 隐私设置：`public`/`whitelist`/`blacklist` |
+| `tags` | array | 隐私标签列表 |
 
 ### admin.json 账密文件
 
-位于 `config/admin.json`，首次启动自动创建，直接编辑后重启服务生效，也可在面板「账号密码」页在线修改：
+位于 `config/admin.json`，首次启动自动创建，也可在面板「账号密码」页在线修改：
 
 ```json
 {
@@ -407,12 +443,6 @@ your_email@qq.com
 your_smtp_password
 ```
 
-**格式说明**：
-- 第 1 行：SMTP 服务器地址
-- 第 2 行：SMTP 服务器端口
-- 第 3 行：发件人邮箱
-- 第 4 行：邮箱授权码（QQ 邮箱为授权码）
-
 ---
 
 ## 🎮 使用指南
@@ -424,14 +454,22 @@ your_smtp_password
 python web_server.py
 ```
 
-2. 浏览器访问：`http://localhost:10001`
+2. 浏览器访问：`http://localhost:10001`（端口自动选择 10001~11000 内第一个可用端口）
 
 3. 默认账号：
    - 用户名：`admin`
    - 密码：`123456`
    - 账密保存在 `config/admin.json`，可在面板内修改
 
-### 2、管理命令列表
+### 2、版本更新方法
+
+> 更新不会丢失配置和记忆数据，保留 `config/` 和 `memory/` 文件夹即可。
+
+- **源码版**：替换 `wxbot_core.py`、`web_server.py`、`templates/` 等源码文件即可
+- **exe 版**：替换 exe 文件即可
+- **更新前建议备份** `config/` 和 `memory/` 文件夹
+
+### 3、管理命令列表
 
 向管理员账号发送以下命令来管理机器人：
 
@@ -464,10 +502,10 @@ python web_server.py
 /选择接口 N               # 切换至第 N 个接口（如：/选择接口 2）
 ```
 
-#### AI 设定
+#### AI Prompt 管理
 ```
-/当前AI设定
-/更改AI设定为`新的系统提示词`
+/当前AI设定               # 查看当前默认 Prompt 内容（读取 config/prompt/默认.md）
+/更改AI设定为`新的提示词`  # 更新默认 Prompt 文件内容
 ```
 
 #### 关键词管理
@@ -496,7 +534,7 @@ python web_server.py
 /更新配置        # 重新加载配置文件
 /当前版本        # 查看机器人版本
 /指令            # 查看所有可用命令
-/状态            # 查看机器人运行状态（含关键词/记忆/延迟等完整信息）
+/状态            # 查看机器人运行状态
 ```
 
 ---
@@ -505,7 +543,7 @@ python web_server.py
 
 ```
 wxbot_plus/
-├── wxbot_class_only_V2.py    # 机器人主程序
+├── wxbot_core.py              # 机器人核心（配置管理、AI接入、消息处理）
 ├── web_server.py              # Web 管理界面
 ├── logger.py                  # 日志模块
 ├── email_send.py              # 邮件发送模块
@@ -513,67 +551,50 @@ wxbot_plus/
 ├── config/                    # 配置文件目录（自动创建）
 │   ├── config.json            # 机器人配置
 │   ├── admin.json             # Web 管理账密
-│   └── email.txt              # 邮件告警配置
+│   ├── email.txt              # 邮件告警配置
+│   └── prompt/                # Prompt 文件目录（自动创建）
+│       ├── 默认.md             # 默认 Prompt（自动创建）
+│       └── *.md               # 其他自定义 Prompt
 ├── memory/                    # 对话记忆目录（自动创建）
-│   └── {wx_id}/               # 按wx号分目录
-│       └── {chat_name}/       # 按聊天窗口分目录
+│   └── {wx_id}/
+│       └── {chat_name}/
 │           └── {chat_name}_memory.json
 ├── panel_logs/                # 运行日志目录（自动创建）
 ├── templates/                 # Web 界面模板
+│   ├── dashboard.html         # 管理面板
+│   ├── login.html
+│   └── static/                # 本地静态资源（Bootstrap Icons 本地化）
 └── wxauto_logs/               # wxautox 日志目录
 ```
 
 ---
 
-## 🔧 核心类说明
-
-### WXBotConfig
-配置管理类，负责配置文件的加载、保存和动态管理。
-
-### MemoryManager
-对话记忆管理类，按聊天窗口分文件存储历史消息，线程安全写入。
-
-**特性**：
-- 每个聊天窗口独立存储为 JSON 文件
-- 写入带线程锁，并发安全
-- 超出最大条数时自动删除最旧的消息
-- `get_messages(chat, n)` 读取最近 n 条，供 AI 接口使用
-
-### OpenAIAPI
-OpenAI 兼容接口类，支持所有 OpenAI 格式的 API。
-
-**特性**：
-- 自动降级到 Responses API 备用方案
-- 支持流式和非流式输出
-- 支持历史记忆上下文（history 参数）
-
-### DusAPI
-DusAPI 兼容接口封装类，使用 Anthropic 格式（`x-api-key` + `/v1/messages`）统一调用 Claude、GPT 等全系模型。
-
-**特性**：
-- 根据模型名称自动选择响应解析方式：含 `claude` 按 Claude 格式解析，其他按 GPT 格式解析
-- **梯度重试机制**：失败后自动重试最多 5 次，间隔 2s→4s→8s→16s→32s 梯度增长
-- 支持历史记忆上下文（history 参数）
-
-### DifyAPI
-Dify 平台接口类，通过 HTTP 请求调用 Dify 对话工作流。支持将历史对话拼接为上下文前缀传入。
-
-### CozeAPI
-扣子平台接口类，使用官方 cozepy SDK 进行流式对话。支持历史消息作为 additional_messages 传入。
-
-### WXBot
-WX机器人主类，整合所有功能的核心控制类。
-
-**核心方法**：
-- `init_wx_listeners()` - 初始化WX监听器，同时初始化 MemoryManager
-- `message_handle_callback()` - 消息回调处理，写入记忆
-- `process_message()` - 消息分发逻辑
-- `process_command()` - 管理命令处理
-- `main()` - 机器人主循环
-
----
-
 ## 🚀 高级功能
+
+### 多 Prompt 使用示例
+
+**场景：不同群聊用不同 Prompt**
+
+1. 在面板「Prompt 管理」页新建两份 Prompt：`客服助手.md` 和 `销售助手.md`
+2. 在「群组管理」页，为「客服群」选择 `客服助手`，为「销售群」选择 `销售助手`
+3. 保存配置，重启机器人即生效
+
+**场景：白名单用户专属接口 + Prompt**
+
+1. 在「私聊监听」页（白名单模式），每个用户后方会出现 Prompt 下拉和接口下拉
+2. 为「VIP客户」绑定专属 Prompt 和高端接口（如 claude-opus）
+3. 普通用户不绑定，自动使用全局默认配置
+
+### 自定义转发使用示例
+
+**场景：重要群聊消息自动转发到私人账号**
+
+1. 在面板「自定义转发」页添加规则
+2. 监听来源：`重要客户群`
+3. 转发类型：关键词转发，关键词填 `合同`、`付款`、`紧急`
+4. 转发目标：自己的另一个账号
+5. 勾选"附带来源信息"
+6. 保存并启动机器人，当重要客户群有人发含这些关键词的消息时，自动转发给你
 
 ### 对话记忆详解
 
@@ -591,22 +612,12 @@ memory/
 **记忆 JSON 格式**：
 ```json
 [
-  {
-    "time": "2024/01/01 12:00:00",
-    "type": "text",
-    "attr": "friend",
-    "sender": "张三",
-    "content": "你好"
-  },
-  {
-    "time": "2024/01/01 12:00:05",
-    "type": "text",
-    "attr": "self",
-    "sender": "我",
-    "content": "你好！有什么可以帮你的？"
-  }
+  {"time": "2024/01/01 12:00:00", "type": "text", "attr": "friend", "sender": "张三", "content": "你好"},
+  {"time": "2024/01/01 12:00:05", "type": "text", "attr": "self", "sender": "我", "content": "你好！有什么可以帮你的？"}
 ]
 ```
+
+**群聊记忆特点**：群聊历史消息传给 AI 时格式为 `[时间] 发送人: 内容`，AI 能准确区分不同群成员的发言。
 
 **注意**：开启记忆后每次 AI 请求都会携带最近 N 条历史，会增加 token 消耗。推荐配置：`memory_max_count=500`，`memory_context_count=100`。
 
@@ -614,47 +625,13 @@ memory/
 
 #### 白名单模式（推荐）
 - 仅监听配置文件中指定的用户和群组
+- **每个用户可单独绑定 Prompt 和 AI 接口**
 - 性能开销小，适合精准监听场景
-- 管理员始终被监听
 
-#### 黑名单模式
+#### 黑名单（全局）模式
 - 监听所有消息，动态管理会话列表
+- 全局共用一个 Prompt（`default_prompt` 指定），接口使用全局默认
 - 自动移除 3 分钟无消息的会话
-- 适合需要全局监听的场景
-
-### 消息处理流程
-
-```
-接收消息
-  ├─ 写入对话记忆（memory_switch 开启时）
-  ├─ attr=friend → 黑/白名单过滤
-  │                  ↓
-  │               群聊消息？
-  │                  ├─ 是 → 检测 @ → 去除 @ 标识 → 带入记忆 → 调用 AI
-  │                  └─ 否 → 管理员命令？
-  │                            ├─ 是 → 执行命令
-  │                            └─ 否 → 关键词回复？
-  │                                      ├─ 是 → 返回关键词回复
-  │                                      └─ 否 → 带入记忆 → 调用 AI 回复
-  ├─ attr=self  → 窗口是管理员（文件传输助手）？
-  │                  ├─ 是 → 执行命令（不调用 AI，防止回复循环）
-  │                  └─ 否 → 忽略
-  └─ attr=system → 群新人欢迎语
-```
-
-### 文件传输助手作为管理员
-
-没有第二个wx账号时，可将 `admin` 设置为 `文件传输助手`，在手机上用当前wx账号向「文件传输助手」发送指令，消息会同步到机器人所在的 PC 并被识别执行。
-
-面板「管理员」页有详细说明。
-
-### 错误恢复机制
-
-- **离线检测**：每 10 秒检测一次WX是否在线
-- **回调异常检测**：监听器回调异常时自动停止
-- **邮件告警**：发生错误时自动发送邮件通知
-- **超时会话管理**：自动移除超时会话，释放资源
-- **DusAPI 梯度重试**：网络抖动或接口临时故障时自动重试，最多 5 次，间隔梯度增长
 
 ---
 
@@ -663,31 +640,25 @@ memory/
 1. **wxautox4 授权**
    - 本项目使用 wxautox4（Plus 版），需要购买授权
    - 购买地址：https://www.siverking.online/static/img/siver_wx.jpg
-   - 请勿用于转卖或发布到公共平台
 
 2. **WX版本**
    - 建议使用WX 4.1.8 版本
-   - 不同版本可能需要调整参数
 
 3. **API 配置**
    - 确保 API 密钥有效
    - 注意 API 调用频率限制
-   - 建议配置备用 API
 
 4. **记忆功能**
    - 开启记忆后每次 AI 请求携带历史，**会增加 token 消耗**
-   - 推荐存储 500 条，AI 带入 100 条，按需调整
-   - 记忆文件存储在 `memory/` 目录，勿提交到公共仓库（含聊天内容）
+   - 记忆文件存储在 `memory/` 目录，勿提交到公共仓库
 
 5. **安全建议**
-   - 不要将 `config/` 和 `memory/` 目录提交到公共仓库
-   - 定期更换 API 密钥
+   - 不要将 `config/` 和 `memory/` 目录提交到公共仓库（含 API Key 和聊天内容）
    - 修改 `config/admin.json` 中的默认密码（默认：`123456`）
 
-6. **性能优化**
-   - 白名单模式性能优于黑名单模式
-   - 关闭不需要的功能可减少资源占用
-   - 定期清理日志文件和记忆文件
+6. **更新注意**
+   - 更新程序时保留 `config/` 和 `memory/` 文件夹，原有配置和记忆完全复用
+   - 更新前建议备份这两个文件夹
 
 ---
 

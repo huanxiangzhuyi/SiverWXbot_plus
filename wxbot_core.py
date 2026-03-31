@@ -2,8 +2,8 @@
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox4版本
 # 作者：https://www.siver.top
 
-version = "V4.6.9"
-version_log = "V4.6.9 - 优化全局监听的图片识别、bug修复"
+version = "V4.6.10"
+version_log = "V4.6.10 - 分离prompt 现在可添加多个prompt每个白名单和群组监听都能独立设置prompt和接口、新增自定义规则转发功能、优化首次启动日志提示、优化群组上下文记忆带入发送人、bug修复"
 
 # ============================================================
 # 标准库导入
@@ -87,6 +87,7 @@ class WXBotConfig:
     def __init__(self):
         _base = os.path.dirname(sys.executable) if hasattr(sys, '_MEIPASS') else os.path.abspath(".")
         self.CONFIG_FILE = os.path.join(_base, 'config', 'config.json')
+        self.prompt_dir  = os.path.join(_base, 'config', 'prompt')
         os.makedirs(os.path.join(_base, 'config'), exist_ok=True)
         self.config = {}
 
@@ -126,6 +127,16 @@ class WXBotConfig:
         self.group_keyword_switch = False   # 群聊关键词回复开关
         self.group_keyword_at_only = False  # 群聊关键词仅被@时触发
         self.keyword_dict = {}              # 关键词 -> 回复内容 字典
+
+        # ---------- 自定义转发配置 ----------
+        self.custom_forward_switch = False  # 自定义转发总开关
+        self.custom_forward_list   = []     # 自定义转发规则列表
+
+        # ---------- 多 Prompt 配置 ----------
+        self.default_prompt   = "默认"      # 全局/fallback prompt 文件名（不含 .md）
+        self.chat_prompt_map  = {}          # 私聊白名单用户 -> prompt 名称
+        self.chat_api_map     = {}          # 私聊白名单用户 -> API 接口索引
+        self.group_prompt_map = {}          # 群组名称 -> prompt 名称
 
         # ---------- 定时消息配置 ----------
         self.scheduled_msg_switch = False    # 定时消息总开关
@@ -205,6 +216,12 @@ class WXBotConfig:
                     "group_keyword_switch": False,
                     "group_keyword_at_only": False,
                     "keyword_dict": {},
+                    "custom_forward_switch": False,
+                    "custom_forward_list": [],
+                    "default_prompt": "默认",
+                    "chat_prompt_map": {},
+                    "chat_api_map": {},
+                    "group_prompt_map": {},
                     "scheduled_msg_switch": False,
                     "scheduled_msg_list": [],
                     "scheduled_moments_switch": False,
@@ -248,6 +265,55 @@ class WXBotConfig:
         """重新加载配置文件，并将最新值同步到所有属性"""
         self.load_config()
         self.update_global_config()
+
+    def init_prompt_dir(self):
+        """确保 prompt 目录存在；迁移旧 prompt 字段；空目录时写入默认 prompt"""
+        os.makedirs(self.prompt_dir, exist_ok=True)
+        # 迁移旧 prompt 字段
+        if 'prompt' in self.config:
+            target = os.path.join(self.prompt_dir, '默认.md')
+            if not os.path.exists(target):
+                try:
+                    with open(target, 'w', encoding='utf-8') as f:
+                        f.write(self.config['prompt'])
+                except Exception as e:
+                    log(level="ERROR", message=f"迁移 prompt 到文件失败: {e}")
+            del self.config['prompt']
+            self.save_config()
+            log(message="已将旧 prompt 字段迁移至 config/prompt/默认.md")
+        # 空目录兜底
+        try:
+            md_files = [f for f in os.listdir(self.prompt_dir) if f.endswith('.md')]
+        except Exception:
+            md_files = []
+        if not md_files:
+            try:
+                with open(os.path.join(self.prompt_dir, '默认.md'), 'w', encoding='utf-8') as f:
+                    f.write("你是一个ai回复助手，请根据用户的问题给出回答,回复尽量保持在30字以内")
+            except Exception as e:
+                log(level="ERROR", message=f"创建默认 prompt 文件失败: {e}")
+
+    def get_prompt_content(self, name):
+        """按名称读取 prompt 文件内容，找不到时 fallback 到 default_prompt，最终返回空字符串"""
+        if not name:
+            name = self.default_prompt
+        path = os.path.join(self.prompt_dir, f'{name}.md')
+        if os.path.exists(path):
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    return f.read()
+            except Exception:
+                pass
+        # fallback 到 default_prompt
+        if name != self.default_prompt:
+            fallback = os.path.join(self.prompt_dir, f'{self.default_prompt}.md')
+            if os.path.exists(fallback):
+                try:
+                    with open(fallback, 'r', encoding='utf-8') as f:
+                        return f.read()
+                except Exception:
+                    pass
+        return ""
 
     # ----------------------------------------------------------
     # 配置同步：将 config 字典中的值同步到实例属性
@@ -387,6 +453,17 @@ class WXBotConfig:
         self.chat_image_recognition_api     = int(self.config.get('chat_image_recognition_api', 0))
         self.group_image_recognition_switch = bool(self.config.get('group_image_recognition_switch', False))
         self.group_image_recognition_api    = int(self.config.get('group_image_recognition_api', 0))
+
+        # 自定义转发配置
+        self.custom_forward_switch = bool(self.config.get('custom_forward_switch', False))
+        self.custom_forward_list   = self.config.get('custom_forward_list', [])
+
+        # 多 Prompt 配置
+        self.default_prompt   = self.config.get('default_prompt', '默认')
+        self.chat_prompt_map  = self.config.get('chat_prompt_map', {})
+        self.chat_api_map     = self.config.get('chat_api_map', {})
+        self.group_prompt_map = self.config.get('group_prompt_map', {})
+        self.init_prompt_dir()
 
         log(message="全局配置更新完成")
 
@@ -600,7 +677,12 @@ class OpenAIAPI:
             for h in history:
                 role = "assistant" if h.get('attr') == 'self' else "user"
                 t = h.get('time', '')
-                content = f"[{t}] {h.get('content', '')}" if t else h.get('content', '')
+                raw = h.get('content', '')
+                sender = h.get('sender', '')
+                if role == 'user' and sender:
+                    content = f"[{t}] {sender}: {raw}" if t else f"{sender}: {raw}"
+                else:
+                    content = f"[{t}] {raw}" if t else raw
                 messages.append({"role": role, "content": content})
         messages.append({"role": "user", "content": message})
 
@@ -873,13 +955,18 @@ class CozeAPI:
             for h in history:
                 t = h.get('time', '')
                 raw = h.get('content', '')
-                content = f"[{t}] {raw}" if t else raw
+                sender = h.get('sender', '')
                 if h.get('attr') == 'self':
+                    content = f"[{t}] {raw}" if t else raw
                     try:
                         additional_messages.append(CozeMessage.build_assistant_answer(content))
                     except Exception:
                         additional_messages.append(CozeMessage.build_user_question_text(f"[助手]: {content}"))
                 else:
+                    if sender:
+                        content = f"[{t}] {sender}: {raw}" if t else f"{sender}: {raw}"
+                    else:
+                        content = f"[{t}] {raw}" if t else raw
                     additional_messages.append(CozeMessage.build_user_question_text(content))
         additional_messages.append(CozeMessage.build_user_question_text(message))
         chunk_message = ""
@@ -951,8 +1038,11 @@ class DusAPI:
              image_path: str = "", image_url: str = ""):
         if model is None:
             model = self.DS_NOW_MOD
-        if prompt is None:
-            prompt = self.config.prompt
+        if not prompt:
+            # fallback：尝试从 prompt 目录读取默认 prompt
+            prompt = getattr(self.config, 'get_prompt_content', lambda n: '')(
+                getattr(self.config, 'default_prompt', '默认')
+            )
 
         headers = {
             "x-api-key": self.api_key,
@@ -966,7 +1056,12 @@ class DusAPI:
             for h in history:
                 role = "assistant" if h.get('attr') == 'self' else "user"
                 t = h.get('time', '')
-                content = f"[{t}] {h.get('content', '')}" if t else h.get('content', '')
+                raw = h.get('content', '')
+                sender = h.get('sender', '')
+                if role == 'user' and sender:
+                    content = f"[{t}] {sender}: {raw}" if t else f"{sender}: {raw}"
+                else:
+                    content = f"[{t}] {raw}" if t else raw
                 messages.append({"role": role, "content": content})
         # 构建 user_content（支持图片多模态）
         if image_path or image_url:
@@ -1100,7 +1195,7 @@ class WXBot:
         tmp.api_key  = cfg.get('key', '')
         tmp.base_url = cfg.get('url', '')
         tmp.model1   = cfg.get('model', '')
-        tmp.prompt   = self.config.prompt   # 备用（实际 chat() 调用时会显式传入当前 prompt）
+        tmp.prompt   = ''   # prompt 总是通过 chat() 调用时显式传入，此处置空
 
         log(message=f"初始化群组专属接口：索引{idx}  SDK:{sdk}  模型:{tmp.model1}")
         if sdk == "Dify":
@@ -1242,6 +1337,22 @@ class WXBot:
                     log(message=f"添加群组 {user} 监听完成")
                 else:
                     log(level="ERROR", message=f"添加群组 {user} 监听失败, {result['message']}")
+
+        # 注册自定义转发监听（跳过已在私聊/群组列表中的来源，避免重复注册）
+        if self.config.custom_forward_switch:
+            _already_listened = set(self.config.listen_list) | set(self.config.group) | {self.config.cmd}
+            _fwd_sources = set()
+            for _rule in self.config.custom_forward_list:
+                for _src in _rule.get('sources', []):
+                    if _src:
+                        _fwd_sources.add(_src)
+            for _source in _fwd_sources:
+                if _source and _source not in _already_listened:
+                    _res = self.wx.AddListenChat(nickname=_source, callback=self.message_handle_callback)
+                    if _res:
+                        log(message=f"添加自定义转发监听源 {_source} 完成")
+                    else:
+                        log(level="ERROR", message=f"添加自定义转发监听源 {_source} 失败")
 
         # 注册定时消息任务（新版：支持多种重复类型）
         if self.config.scheduled_msg_switch:
@@ -1678,6 +1789,12 @@ class WXBot:
                             listen_chat[1] = time.time()
                             break
                 result = self.process_message(chat, msg)
+                # 自定义规则转发处理（在普通消息处理完成后执行，不影响原有流程）
+                if self.config.custom_forward_switch:
+                    try:
+                        self._handle_custom_forward(chat, msg)
+                    except Exception as _fwd_e:
+                        log(level="ERROR", message=f"自定义转发处理出错: {_fwd_e}")
                 if not result:
                     self.is_err(
                         self.wx.nickname + f" wxbot处理监听新消息失败！",
@@ -1791,7 +1908,7 @@ class WXBot:
                             rec_api = self._init_api_by_index(self.config.group_image_recognition_api)
                             reply = rec_api.chat(
                                 "请简短描述这张图片的内容",
-                                prompt=self.config.prompt,
+                                prompt=self._get_group_prompt(chat.who),
                                 history=history,
                                 image_path=message.content
                             )
@@ -1801,20 +1918,20 @@ class WXBot:
                             rec_api = self._init_api_by_index(self.config.group_image_recognition_api)
                             reply = rec_api.chat(
                                 text_part.strip() or "请简短描述这张图片的内容",
-                                prompt=self.config.prompt,
+                                prompt=self._get_group_prompt(chat.who),
                                 history=history,
                                 image_path=img_path.strip()
                             )
                         else:
                             # 普通文字消息，走原有群组逻辑
                             group_api = self._get_group_api(chat.who)
-                            reply = group_api.chat(content_without_at, prompt=self.config.prompt, history=history)
+                            reply = group_api.chat(content_without_at, prompt=self._get_group_prompt(chat.who), history=history)
                     else:
                         # 识别关闭：图片消息静默跳过，文字正常
                         # if message.type == 'image' or '+引用的图片:' in content_without_at:
                             # return result
                         group_api = self._get_group_api(chat.who)
-                        reply = group_api.chat(content_without_at, prompt=self.config.prompt, history=history)
+                        reply = group_api.chat(content_without_at, prompt=self._get_group_prompt(chat.who), history=history)
                 except Exception as e:
                     print(traceback.format_exc())
                     log(level="ERROR", message=str(e) + "\n群组中调用AI回复错误！！")
@@ -1832,8 +1949,82 @@ class WXBot:
             return result
 
         # --- 普通好友：调用 AI 回复 ---
+        # 白名单模式下：若来源不在白名单中（仅为自定义转发专属监听目标），跳过 AI 回复
+        if (not self.config.AllListen_switch and
+                chat.who not in self.config.listen_list and
+                chat.who not in self.config.group and
+                chat.who != self.config.cmd):
+            return result
         result = self.wx_send_ai(chat, message)
         return result
+
+    def _get_chat_api(self, user_name):
+        """获取私聊用户对应的 AI 接口实例（白名单模式查 chat_api_map，否则用默认接口）"""
+        if not self.config.AllListen_switch:
+            idx = self.config.chat_api_map.get(user_name)
+            if idx is not None:
+                if idx not in self.api_cache:
+                    self.api_cache[idx] = self._init_api_by_index(idx)
+                return self.api_cache[idx]
+        return self.api
+
+    def _get_chat_prompt(self, user_name):
+        """获取私聊用户对应的 prompt 内容（白名单模式查 chat_prompt_map，全局模式用 default_prompt）"""
+        if not self.config.AllListen_switch:
+            name = self.config.chat_prompt_map.get(user_name) or self.config.default_prompt
+        else:
+            name = self.config.default_prompt
+        return self.config.get_prompt_content(name)
+
+    def _get_group_prompt(self, group_name):
+        """获取群组对应的 prompt 内容（查 group_prompt_map，未配置则用 default_prompt）"""
+        name = self.config.group_prompt_map.get(group_name) or self.config.default_prompt
+        return self.config.get_prompt_content(name)
+
+    def _is_custom_forward_source(self, chat_who):
+        """判断某个会话是否是任意自定义转发规则的监听来源"""
+        for rule in self.config.custom_forward_list:
+            if chat_who in rule.get('sources', []):
+                return True
+        return False
+
+    def _handle_custom_forward(self, chat, message):
+        """
+        自定义规则转发执行器。
+        遍历所有规则，找到 chat.who 匹配的来源，按规则类型判断是否转发，
+        符合条件则逐目标转发（每次转发前延时 1 秒）。
+
+        转发类型：
+          keyword — 消息内容包含任意关键词时转发
+          sender  — 消息发送人匹配时转发
+          all     — 无差别转发，所有消息均转发
+        """
+        if not self.config.custom_forward_switch:
+            return
+        for rule in self.config.custom_forward_list:
+            if chat.who not in rule.get('sources', []):
+                continue
+            rule_type = rule.get('type', 'all')
+            should_forward = False
+            if rule_type == 'all':
+                should_forward = True
+            elif rule_type == 'keyword':
+                keywords = rule.get('keywords', [])
+                should_forward = any(kw and kw in message.content for kw in keywords)
+            elif rule_type == 'sender':
+                senders = rule.get('senders', [])
+                should_forward = bool(senders) and message.sender in senders
+            if should_forward:
+                forward_with_source = rule.get('forward_with_source', False)
+                src_msg = f"来源窗口：{chat.who}，发送人：{message.sender}" if forward_with_source else None
+                for target in rule.get('targets', []):
+                    if target:
+                        time.sleep(1)
+                        if src_msg:
+                            message.forward(target, message=src_msg)
+                        else:
+                            message.forward(target)
+                        log(message=f"[自定义转发] {chat.who} → {target}（规则类型：{rule_type}，附带来源：{forward_with_source}）")
 
     def wx_send_ai(self, chat, message):
         """
@@ -1862,11 +2053,11 @@ class WXBot:
                     )
                 if self.config.chat_image_recognition_switch:
                     if message.type == 'image':
-                        # 直接图片消息：content 已被替换为本地路径
+                        # 直接图片消息：content 已被替换为本地路径（图片识别优先使用图片识别接口）
                         rec_api = self._init_api_by_index(self.config.chat_image_recognition_api)
                         reply = rec_api.chat(
                             "请简短描述这张图片的内容",
-                            prompt=self.config.prompt,
+                            prompt=self._get_chat_prompt(chat.who),
                             history=history,
                             image_path=message.content
                         )
@@ -1876,18 +2067,18 @@ class WXBot:
                         rec_api = self._init_api_by_index(self.config.chat_image_recognition_api)
                         reply = rec_api.chat(
                             text_part.strip() or "请简短描述这张图片的内容",
-                            prompt=self.config.prompt,
+                            prompt=self._get_chat_prompt(chat.who),
                             history=history,
                             image_path=img_path.strip()
                         )
                     else:
-                        # 普通文字消息，走原有逻辑
-                        reply = self.api.chat(message.content, prompt=self.config.prompt, history=history)
+                        # 普通文字消息：使用用户专属接口和 prompt
+                        reply = self._get_chat_api(chat.who).chat(message.content, prompt=self._get_chat_prompt(chat.who), history=history)
                 else:
                     # 识别关闭：图片消息静默跳过，文字消息正常
                     # if message.type == 'image' or '+引用的图片:' in message.content:
                         # return True
-                    reply = self.api.chat(message.content, prompt=self.config.prompt, history=history)
+                    reply = self._get_chat_api(chat.who).chat(message.content, prompt=self._get_chat_prompt(chat.who), history=history)
         except Exception as e:
             print(traceback.format_exc())
             log(level="ERROR", message=str(e) + "\nAPI返回错误，请稍后再试")
@@ -1953,7 +2144,8 @@ class WXBot:
         elif content.startswith("/选择接口"):
             result = self.handle_select_api_config(chat, message)
         elif content == "/当前AI设定":
-            result = chat.SendMsg('当前AI设定：\n' + self.config.prompt)
+            _default_content = self.config.get_prompt_content(self.config.default_prompt)
+            result = chat.SendMsg(f'当前默认AI设定（{self.config.default_prompt}）：\n' + _default_content)
         elif content.startswith("/更改AI设定为") or content.startswith("/更改ai设定为"):
             result = self.handle_change_prompt(chat, message)
         elif content == "/更新配置":
@@ -2225,15 +2417,21 @@ class WXBot:
         return chat.SendMsg(f"已切换至接口 {n}\nSDK：{cfg.get('sdk', '')}\n模型：{cfg.get('model', '')}")
 
     def handle_change_prompt(self, chat, message):
-        """处理 /更改AI设定为 指令：更新 AI 系统提示词"""
+        """处理 /更改AI设定为 指令：更新默认 prompt 文件内容"""
         if "AI设定" in message.content:
             new_prompt = re.sub("/更改AI设定为", "", message.content).strip()
         else:
             new_prompt = re.sub("/更改ai设定为", "", message.content).strip()
-        self.config.config['prompt'] = new_prompt
-        self.config.save_config()
-        self.config.refresh_config()
-        return chat.SendMsg('AI设定已更新\n' + self.config.prompt)
+        # 写入默认 prompt 文件
+        target = os.path.join(self.config.prompt_dir, f'{self.config.default_prompt}.md')
+        try:
+            with open(target, 'w', encoding='utf-8') as f:
+                f.write(new_prompt)
+            log(message=f"默认 prompt 已更新：{target}")
+        except Exception as e:
+            log(level="ERROR", message=f"更新默认 prompt 文件失败: {e}")
+            return chat.SendMsg(f'AI设定更新失败：{e}')
+        return chat.SendMsg(f'默认AI设定（{self.config.default_prompt}）已更新\n' + new_prompt)
 
     def send_command_list(self, chat):
         """发送全量指令帮助列表"""
@@ -2712,9 +2910,13 @@ class WXBot:
             self.run_flag = True
         except Exception as e:
             print(traceback.format_exc())
-            log(level="ERROR", message=str(e) + "\n初始化微信监听器失败，请检查微信是否启动登录正确")
+            log(level="ERROR", message=str(e) + "\n初始化微信监听器失败，请检查微信是否启动登录正确，微信主窗口是否开着")
+            log(level="ERROR", message=str(e) + "\n初始化微信监听器失败，请检查微信是否启动登录正确，微信主窗口是否开着")
             log(level="ERROR", message=str(e) + "\n请尝试退出wx再重新登录后再启动")
-            log(level="ERROR", message=str(e) + "\n若重启wx还是不行，请进入面板右上角文档检查环境要求，wx版本是否匹配")
+            log(level="ERROR", message=str(e) + "\n请尝试退出wx再重新登录后再启动")
+            log(level="ERROR", message=str(e) + "\n若重启wx还是不行，就请重启整个面板程序，面板和wx都重启了还不行就请进入面板右上角文档检查环境要求，wx版本是否匹配")
+            log(level="ERROR", message=str(e) + "\n若重启wx还是不行，就请重启整个面板程序，面板和wx都重启了还不行就请进入面板右上角文档检查环境要求，wx版本是否匹配")
+            log(level="ERROR", message=str(e) + "\n若重启wx还是不行，就请重启整个面板程序，面板和wx都重启了还不行就请进入面板右上角文档检查环境要求，wx版本是否匹配")
             self.run_flag = False
 
         # 主循环
