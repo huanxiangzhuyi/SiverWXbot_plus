@@ -2,8 +2,8 @@
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox4版本
 # 作者：https://www.siver.top
 
-version = "V4.7.03"
-version_log = "V4.7.03 - 新增私聊与群组ai回复可分多条发送(需支持prompt输入的接口)、优化识图的图片下载与页面提示、新增接口错误时的自定义固定回复语、新增与优化管理员/命令、新增面板收取开发者广播通知功能、自定义规则转发来源支持设置为全部来源、修复残留监听导致的双回复bug、bug修复"
+version = "V4.7.04"
+version_log = "V4.7.04 - 优化上下文记忆带入、优化记忆展示、优化拆分回复提示、优化运行中的重载配置运行按钮功能、bug修复"
 
 # ============================================================
 # 标准库导入
@@ -181,9 +181,9 @@ class WXBotConfig:
         self.random_moments_list   = []     # 随机定时朋友圈任务列表
 
         # ---------- 对话记忆配置 ----------
-        self.memory_switch        = True     # 记忆开关（默认开启）
-        self.memory_max_count     = 500      # 单窗口最多存储条数
-        self.memory_context_count = 100      # AI 请求时带入条数
+        self.memory_switch        = True      # 记忆开关（默认开启）
+        self.memory_max_count     = 3000     # 单窗口最多存储条数（上限 5000）
+        self.memory_context_count = 1000     # AI 请求时带入条数
 
         # ---------- 发送延迟配置 ----------
         self.reply_delay_switch = True  # 模拟人工操作延迟开关（默认开启）
@@ -260,8 +260,8 @@ class WXBotConfig:
                     "everyday_start_bot_time": "08:00",
                     "everyday_stop_bot_time": "23:00",
                     "memory_switch": True,
-                    "memory_max_count": 500,
-                    "memory_context_count": 100,
+                    "memory_max_count": 3000,
+                    "memory_context_count": 1000,
                     "reply_delay_switch": True,
                     "reply_delay_min": 1,
                     "reply_delay_max": 5,
@@ -464,8 +464,8 @@ class WXBotConfig:
 
         # 对话记忆配置
         self.memory_switch        = self.config.get('memory_switch', True)
-        self.memory_max_count     = int(self.config.get('memory_max_count', 500))
-        self.memory_context_count = int(self.config.get('memory_context_count', 100))
+        self.memory_max_count     = int(self.config.get('memory_max_count', 3000))
+        self.memory_context_count = int(self.config.get('memory_context_count', 1000))
 
         # 发送延迟配置（若旧配置文件中不存在则自动补写默认值）
         _delay_defaults = {'reply_delay_switch': True, 'reply_delay_min': 1, 'reply_delay_max': 5}

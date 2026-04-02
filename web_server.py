@@ -412,8 +412,8 @@ def dashboard():
     config.setdefault('everyday_start_bot_time', "08:00")
     config.setdefault('everyday_stop_bot_time', "23:00")
     config.setdefault('memory_switch', True)
-    config.setdefault('memory_max_count', 500)
-    config.setdefault('memory_context_count', 100)
+    config.setdefault('memory_max_count', 3000)
+    config.setdefault('memory_context_count', 1000)
     config.setdefault('reply_delay_switch', True)
     config.setdefault('reply_delay_min', 1)
     config.setdefault('reply_delay_max', 5)
@@ -1212,8 +1212,8 @@ def main():
                 "everyday_start_bot_time": "08:00",
                 "everyday_stop_bot_time": "23:00",
                 "memory_switch": True,
-                "memory_max_count": 500,
-                "memory_context_count": 100,
+                "memory_max_count": 3000,
+                "memory_context_count": 1000,
                 "reply_delay_switch": True,
                 "reply_delay_min": 1,
                 "reply_delay_max": 5,
