@@ -132,7 +132,7 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
 .prompt-editor-panel { flex:1; min-width:0; display:flex; flex-direction:column; }
 
 /* ===== Scheduled Msg ===== */
-.scheduled-msg-item, .scheduled-moments-item, .random-moments-item { background: var(--muted-bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
+.scheduled-msg-item, .scheduled-moments-item, .random-moments-item, .random-msg-item { background: var(--muted-bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
 .weekday-btn { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; border: 1.5px solid var(--border); background: var(--card); font-size: 12.5px; font-weight: 600; color: var(--muted); cursor: pointer; transition: all .15s; }
 .weekday-btn.active { background: var(--primary); border-color: var(--primary); color: #fff; }
 .weekday-btn:hover:not(.active) { border-color: var(--primary); color: var(--primary); }
@@ -854,6 +854,28 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
         <input class="form-check-input" type="checkbox" id="new_friend_switch" name="new_friend_switch" {% if config.new_friend_switch %}checked{% endif %}>
         <label for="new_friend_switch">自动通过新好友申请</label>
       </div>
+      <div class="row g-2 mt-1 mb-1">
+        <div class="col-12"><label class="cfg-label">随机检查间隔</label></div>
+        <div class="col-auto d-flex align-items-center gap-2">
+          <span style="font-size:13px;color:var(--muted);">最短</span>
+          <input type="number" class="form-control" id="new_friend_check_min" name="new_friend_check_min" min="60" max="3600" value="{{ config.new_friend_check_min|default(60) }}" style="width:90px;">
+          <span style="font-size:13px;color:var(--muted);">秒 &nbsp; 最长</span>
+          <input type="number" class="form-control" id="new_friend_check_max" name="new_friend_check_max" min="60" max="3600" value="{{ config.new_friend_check_max|default(300) }}" style="width:90px;">
+          <span style="font-size:13px;color:var(--muted);">秒</span>
+        </div>
+        <div class="col-12"><div class="cfg-hint">随机间隔范围 60 ~ 3600 秒，默认 60 ~ 300 秒</div></div>
+      </div>
+      <div class="row g-2 mb-3">
+        <div class="col-12"><label class="cfg-label">通过后自动设置备注</label></div>
+        <div class="col-auto d-flex align-items-center gap-2 flex-wrap">
+          <span style="font-size:13px;color:var(--muted);">前缀</span>
+          <input type="text" class="form-control" id="new_friend_remark_prefix" name="new_friend_remark_prefix" placeholder="（留空）" value="{{ config.new_friend_remark_prefix|default('') }}" style="width:130px;">
+          <span style="font-size:13px;color:var(--muted);">+ 微信昵称 +</span>
+          <span style="font-size:13px;color:var(--muted);">后缀</span>
+          <input type="text" class="form-control" id="new_friend_remark_suffix" name="new_friend_remark_suffix" placeholder="_机器人备注" value="{{ config.new_friend_remark_suffix|default('_机器人备注') }}" style="width:130px;">
+        </div>
+        <div class="col-12"><div class="cfg-hint">备注格式：前缀 + 微信昵称 + 后缀，前后缀均可留空</div></div>
+      </div>
       <div class="switch-row">
         <input class="form-check-input" type="checkbox" id="new_friend_reply_switch" name="new_friend_reply_switch" {% if config.new_friend_reply_switch %}checked{% endif %}>
         <label for="new_friend_reply_switch">新好友自动回复</label>
@@ -1077,9 +1099,85 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "S
       </div>
       <button type="button" class="btn-add" id="btn-add-scheduled-task"><i class="bi bi-plus-circle"></i> 添加定时任务</button>
     </div>
-  </div>
 
-  <!-- ===== Tab: Moments ===== -->
+    <!-- 随机定时消息 -->
+    <div class="cfg-card" style="margin-top:20px;">
+      <div class="cfg-card-header"><i class="bi bi-shuffle"></i><h5>随机定时消息</h5><span class="desc">时间窗口内随机选时发送，避免固定规律</span></div>
+      <div class="cfg-hint" style="margin-bottom:14px;padding:10px 14px;background:#f3f0ff;border:1px solid #c9b8ff;border-radius:6px;color:#4a1fa8;font-size:12.5px;line-height:1.9;">
+        <i class="bi bi-info-circle" style="color:#7c4dff;"></i>
+        <strong>功能说明：</strong>在设定的时间窗口内随机挑选一个时刻向指定目标发送消息，避免每天定点发送被发现规律。<br>
+        每周模式随机抽取指定天数（如设5天，则本周随机选5天发送，其余天跳过）；每月同理。<br>
+        <strong>⚠️ 注意：</strong>需要启动机器人后才会生效；每个任务每天最多触发一次。
+      </div>
+      <div class="switch-row">
+        <input class="form-check-input" type="checkbox" id="random_msg_switch" name="random_msg_switch" {% if config.random_msg_switch %}checked{% endif %}>
+        <label for="random_msg_switch">启用随机定时消息</label>
+      </div>
+      <div id="random_msg_container">
+        {% for item in config.random_msg_list %}
+        <div class="random-msg-item" data-rmsgid="{{ item.id }}">
+          <div class="d-flex align-items-center justify-content-between mb-3">
+            <div class="switch-row" style="margin-bottom:0;flex:1">
+              <input class="form-check-input rmsg-enabled" type="checkbox" {% if item.enabled %}checked{% endif %}>
+              <label>启用此任务</label>
+            </div>
+            <button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>
+          </div>
+          <div class="mb-2">
+            <label class="cfg-label">发送目标 <span style="font-size:11px;color:var(--primary);font-weight:400;">（可添加多个，同一批消息将依次发给每个目标，用于群发）</span></label>
+            <div class="rmsg-target-list">
+              {% for t in item.get('targets', []) %}
+              <div class="list-item" style="margin-bottom:6px;">
+                <input type="text" class="form-control" name="rmsg_target" value="{{ t }}" placeholder="联系人或群名">
+                <button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>
+              </div>
+              {% endfor %}
+            </div>
+            <button type="button" class="btn-add btn-add-rmsg-target" style="margin-top:6px;"><i class="bi bi-plus-circle"></i> 添加目标</button>
+          </div>
+          <div class="row mb-2">
+            <div class="col-6">
+              <label class="cfg-label">发送时间窗口 开始</label>
+              <input type="time" class="form-control rmsg-time-start" value="{{ item.time_start }}">
+            </div>
+            <div class="col-6">
+              <label class="cfg-label">发送时间窗口 结束</label>
+              <input type="time" class="form-control rmsg-time-end" value="{{ item.time_end }}">
+            </div>
+          </div>
+          <div class="mb-2">
+            <label class="cfg-label">重复类型</label>
+            <select class="form-select rmsg-repeat-type">
+              <option value="daily"   {% if item.repeat_type == 'daily'   %}selected{% endif %}>每天</option>
+              <option value="weekly"  {% if item.repeat_type == 'weekly'  %}selected{% endif %}>每周</option>
+              <option value="monthly" {% if item.repeat_type == 'monthly' %}selected{% endif %}>每月</option>
+            </select>
+          </div>
+          <div class="mb-2 rmsg-days-wrap" style="{% if item.repeat_type == 'daily' %}display:none{% endif %}">
+            <label class="cfg-label rmsg-days-label">
+              {% if item.repeat_type == 'monthly' %}每月随机抽几天发送{% else %}每周随机抽几天发送{% endif %}
+              <span class="cfg-hint" style="display:inline;margin-left:6px;">（不超过{% if item.repeat_type == 'monthly' %}本月天数{% else %}7{% endif %}）</span>
+            </label>
+            <input type="number" class="form-control rmsg-days-count" min="1" max="{% if item.repeat_type == 'monthly' %}31{% else %}7{% endif %}" value="{{ item.random_days_count or 1 }}">
+          </div>
+          <label class="cfg-label">消息内容</label>
+          <div class="cfg-hint" style="margin-bottom:8px;"><i class="bi bi-image" style="color:var(--primary);"></i> 填写文字内容将发送文字，填写图片完整路径（如 <code>C:\图片\hello.png</code>）将自动发送图片</div>
+          <div class="rmsg-msg-list">
+            {% for msg in item.msgs %}
+            <div class="list-item">
+              <input type="text" class="form-control" name="rmsg_msg" value="{{ msg }}" placeholder="文字内容 或 图片完整路径">
+              <button type="button" class="btn-pick-img" title="点击选择本地图片，自动填入路径"><i class="bi bi-folder2-open"></i></button>
+              <button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>
+            </div>
+            {% endfor %}
+          </div>
+          <button type="button" class="btn-add btn-add-rmsg-msg"><i class="bi bi-plus-circle"></i> 添加消息</button>
+        </div>
+        {% endfor %}
+      </div>
+      <button type="button" class="btn-add" id="btn-add-random-msg-task" style="margin-top:4px;"><i class="bi bi-plus-circle"></i> 添加任务</button>
+    </div>
+  </div>
   <div class="config-panel" id="tab-moments">
 
     <!-- 随机朋友圈点赞 -->
@@ -1771,7 +1869,7 @@ $(function(){
 
   // ===== Remove List Item =====
   $(document).on('click','.btn-remove-item',function(){
-    $(this).closest('.list-item, .keyword-item, .scheduled-msg-item, .scheduled-moments-item, .random-moments-item, .custom-forward-item').remove();
+    $(this).closest('.list-item, .keyword-item, .scheduled-msg-item, .scheduled-moments-item, .random-moments-item, .random-msg-item, .custom-forward-item').remove();
   });
 
   // ===== 选择本地图片（调后端弹系统文件选择框）=====
@@ -2344,6 +2442,91 @@ $(function(){
     $('#scheduled_msg_container').append(html);
   });
 
+  // ===== Random Msg: 重复类型切换（显示/隐藏随机天数输入）=====
+  $(document).on('change','.rmsg-repeat-type',function(){
+    var $item=$(this).closest('.random-msg-item');
+    var v=$(this).val();
+    var $wrap=$item.find('.rmsg-days-wrap');
+    if(v==='daily'){
+      $wrap.hide();
+    } else {
+      $wrap.show();
+      $item.find('.rmsg-days-label').text(v==='monthly'?'每月随机抽几天发送':'每周随机抽几天发送');
+      $item.find('.rmsg-days-count').attr('max',v==='monthly'?31:7);
+    }
+  });
+
+  // ===== Random Msg: 添加目标 =====
+  $(document).on('click','.btn-add-rmsg-target',function(){
+    $(this).prev('.rmsg-target-list').append(
+      '<div class="list-item" style="margin-bottom:6px;">'+
+        '<input type="text" class="form-control" name="rmsg_target" placeholder="联系人或群名">'+
+        '<button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>'+
+      '</div>'
+    );
+  });
+
+  // ===== Random Msg: 添加消息内容 =====
+  $(document).on('click','.btn-add-rmsg-msg',function(){
+    $(this).prev('.rmsg-msg-list').append(
+      '<div class="list-item">'+
+        '<input type="text" class="form-control" name="rmsg_msg" placeholder="文字内容 或 图片完整路径">'+
+        '<button type="button" class="btn-pick-img" title="点击选择本地图片，自动填入路径"><i class="bi bi-folder2-open"></i></button>'+
+        '<button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>'+
+      '</div>'
+    );
+  });
+
+  // ===== Random Msg: 添加任务 =====
+  var rmsgIdCounter=Date.now()+3000000;
+  $('#btn-add-random-msg-task').click(function(){
+    rmsgIdCounter++;
+    var html=
+    '<div class="random-msg-item" data-rmsgid="'+rmsgIdCounter+'">'+
+      '<div class="d-flex align-items-center justify-content-between mb-3">'+
+        '<div class="switch-row" style="margin-bottom:0;flex:1">'+
+          '<input class="form-check-input rmsg-enabled" type="checkbox" checked>'+
+          '<label>启用此任务</label>'+
+        '</div>'+
+        '<button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>'+
+      '</div>'+
+      '<div class="mb-2"><label class="cfg-label">发送目标 <span style="font-size:11px;color:var(--primary);font-weight:400;">（可添加多个，同一批消息将依次发给每个目标，用于群发）</span></label>'+
+        '<div class="rmsg-target-list">'+
+          '<div class="list-item" style="margin-bottom:6px;">'+
+            '<input type="text" class="form-control" name="rmsg_target" placeholder="联系人或群名">'+
+            '<button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>'+
+          '</div>'+
+        '</div>'+
+        '<button type="button" class="btn-add btn-add-rmsg-target" style="margin-top:6px;"><i class="bi bi-plus-circle"></i> 添加目标</button></div>'+
+      '<div class="row mb-2">'+
+        '<div class="col-6"><label class="cfg-label">发送时间窗口 开始</label>'+
+          '<input type="time" class="form-control rmsg-time-start" value="09:00"></div>'+
+        '<div class="col-6"><label class="cfg-label">发送时间窗口 结束</label>'+
+          '<input type="time" class="form-control rmsg-time-end" value="21:00"></div>'+
+      '</div>'+
+      '<div class="mb-2"><label class="cfg-label">重复类型</label>'+
+        '<select class="form-select rmsg-repeat-type">'+
+          '<option value="daily">每天</option>'+
+          '<option value="weekly">每周</option>'+
+          '<option value="monthly">每月</option>'+
+        '</select></div>'+
+      '<div class="mb-2 rmsg-days-wrap" style="display:none">'+
+        '<label class="cfg-label rmsg-days-label">每周随机抽几天发送 <span class="cfg-hint" style="display:inline;margin-left:6px;">（不超过7）</span></label>'+
+        '<input type="number" class="form-control rmsg-days-count" min="1" max="7" value="1"></div>'+
+      '<label class="cfg-label">消息内容</label>'+
+      '<div class="cfg-hint" style="margin-bottom:8px;"><i class="bi bi-image" style="color:var(--primary);"></i> 填写文字内容将发送文字，填写图片完整路径（如 <code>C:\\图片\\hello.png</code>）将自动发送图片</div>'+
+      '<div class="rmsg-msg-list">'+
+        '<div class="list-item">'+
+          '<input type="text" class="form-control" name="rmsg_msg" placeholder="文字内容 或 图片完整路径">'+
+          '<button type="button" class="btn-pick-img" title="点击选择本地图片，自动填入路径"><i class="bi bi-folder2-open"></i></button>'+
+          '<button type="button" class="btn-rm btn-remove-item"><i class="bi bi-x-lg"></i></button>'+
+        '</div>'+
+      '</div>'+
+      '<button type="button" class="btn-add btn-add-rmsg-msg"><i class="bi bi-plus-circle"></i> 添加消息</button>'+
+    '</div>';
+    $('#random_msg_container').append(html);
+  });
+
   // ===== Save Config =====
   function saveConfig(callback){
     // 收集接口配置列表
@@ -2374,6 +2557,10 @@ $(function(){
       group_welcome:$('#group_welcome').is(':checked'),
       new_friend_switch:$('#new_friend_switch').is(':checked'),
       new_friend_reply_switch:$('#new_friend_reply_switch').is(':checked'),
+      new_friend_check_min:parseInt($('#new_friend_check_min').val())||60,
+      new_friend_check_max:parseInt($('#new_friend_check_max').val())||300,
+      new_friend_remark_prefix:$('#new_friend_remark_prefix').val(),
+      new_friend_remark_suffix:$('#new_friend_remark_suffix').val(),
       chat_keyword_switch:$('#chat_keyword_switch').is(':checked'),
       group_keyword_switch:$('#group_keyword_switch').is(':checked'),
       group_keyword_at_only:$('#group_keyword_at_only').is(':checked'),
@@ -2386,6 +2573,8 @@ $(function(){
       keyword_dict:{},
       scheduled_msg_switch:$('#scheduled_msg_switch').is(':checked'),
       scheduled_msg_list:[],
+      random_msg_switch:$('#random_msg_switch').is(':checked'),
+      random_msg_list:[],
       scheduled_moments_switch:$('#scheduled_moments_switch').is(':checked'),
       scheduled_moments_list:[],
       random_moments_switch:$('#random_moments_switch').is(':checked'),
@@ -2464,6 +2653,25 @@ $(function(){
           }
           return [];
         })(),
+        msgs:msgs
+      });
+    });
+    // 收集随机定时消息任务列表
+    $('.random-msg-item').each(function(){
+      var $r=$(this), msgs=[];
+      $r.find('input[name="rmsg_msg"]').each(function(){ if($(this).val()) msgs.push($(this).val()); });
+      var repeatType=$r.find('.rmsg-repeat-type').val();
+      var daysCount=parseInt($r.find('.rmsg-days-count').val())||1;
+      var maxDays=(repeatType==='weekly'?7:31);
+      daysCount=Math.max(1,Math.min(maxDays,daysCount));
+      configData.random_msg_list.push({
+        id:$r.data('rmsgid'),
+        enabled:$r.find('.rmsg-enabled').is(':checked'),
+        targets:(function(){ var a=[]; $r.find('input[name="rmsg_target"]').each(function(){ if($(this).val().trim()) a.push($(this).val().trim()); }); return a; })(),
+        time_start:$r.find('.rmsg-time-start').val()||'09:00',
+        time_end:$r.find('.rmsg-time-end').val()||'21:00',
+        repeat_type:repeatType,
+        random_days_count:daysCount,
         msgs:msgs
       });
     });

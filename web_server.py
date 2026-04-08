@@ -467,6 +467,7 @@ def _coerce_bool_fields(merged_config):
         'group_keyword_switch',
         'group_keyword_at_only',
         'scheduled_msg_switch',
+        'random_msg_switch',                # 随机定时消息开关
         'scheduled_moments_switch',         # 定时朋友圈开关
         'moments_like_switch',              # 随机朋友圈点赞开关
         'random_moments_switch',            # 随机定时朋友圈开关
@@ -488,7 +489,7 @@ def _coerce_bool_fields(merged_config):
                 merged_config[field] = bool(v)
 
 def _coerce_list_fields(merged_config):
-    list_fields = ['listen_list', 'group', 'new_friend_msg', 'scheduled_msg_list', 'scheduled_moments_list', 'random_moments_list', 'custom_forward_list']
+    list_fields = ['listen_list', 'group', 'new_friend_msg', 'scheduled_msg_list', 'random_msg_list', 'scheduled_moments_list', 'random_moments_list', 'custom_forward_list']
     for field in list_fields:
         if field in merged_config and not isinstance(merged_config[field], list):
             if isinstance(merged_config[field], str):
@@ -509,6 +510,24 @@ def _coerce_float_fields(merged_config):
         except (TypeError, ValueError):
             # 若非法，则保持原值或回退默认
             merged_config['group_welcome_random'] = float(read_config().get('group_welcome_random', 1.0))
+
+def _coerce_int_range_fields(merged_config):
+    """对整数范围字段做类型校验和区间限制"""
+    int_range_fields = {
+        'new_friend_check_min': (60, 3600, 60),
+        'new_friend_check_max': (60, 3600, 300),
+    }
+    for field, (lo, hi, default) in int_range_fields.items():
+        if field in merged_config:
+            try:
+                val = int(merged_config[field])
+                merged_config[field] = max(lo, min(hi, val))
+            except (TypeError, ValueError):
+                merged_config[field] = default
+    # 保证 min <= max
+    if 'new_friend_check_min' in merged_config and 'new_friend_check_max' in merged_config:
+        if merged_config['new_friend_check_min'] > merged_config['new_friend_check_max']:
+            merged_config['new_friend_check_max'] = merged_config['new_friend_check_min']
 
 def _coerce_dict_fields(merged_config):
     # keyword_dict 支持：dict / JSON字符串 / list[{key, value}]
@@ -613,6 +632,7 @@ def save_config(config_data):
         _coerce_bool_fields(merged_config)
         _coerce_list_fields(merged_config)
         _coerce_float_fields(merged_config)
+        _coerce_int_range_fields(merged_config)
         _coerce_dict_fields(merged_config)
 
         with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
@@ -1233,12 +1253,18 @@ def main():
                 "new_friend_switch": False,
                 "new_friend_reply_switch": False,
                 "new_friend_msg": [],
+                "new_friend_check_min": 60,
+                "new_friend_check_max": 300,
+                "new_friend_remark_prefix": "",
+                "new_friend_remark_suffix": "_机器人备注",
                 "chat_keyword_switch": False,
                 "group_keyword_switch": False,
                 "group_keyword_at_only": False,
                 "keyword_dict": {},
                 "scheduled_msg_switch": False,
                 "scheduled_msg_list": [],
+                "random_msg_switch": False,
+                "random_msg_list": [],
                 "scheduled_moments_switch": False,
                 "scheduled_moments_list": [],
                 "random_moments_switch": False,

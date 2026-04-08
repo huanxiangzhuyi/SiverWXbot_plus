@@ -2,8 +2,8 @@
 # Siver微信机器人 siver_wxbot - 面向对象版本 - wxautox4版本
 # 作者：https://www.siver.top
 
-version = "V4.7.08"
-version_log = "V4.7.08 - 优化dusapi接口调用逻辑防止受openai官方接口调整影响"
+version = "V4.7.09"
+version_log = "V4.7.09 - 新增可以暂停自动回复方便人工接管的管理员命令、自动通过好友支持自定义前后缀备注、自动通过好友支持自定义设置随机检查时间、定时消息支持设定为随机定时消息、修复全局模式将企微私信识别成群聊跳过的bug"
 
 # ============================================================
 # 标准库导入
@@ -167,6 +167,10 @@ class WXBotConfig:
         self.scheduled_msg_switch = False    # 定时消息总开关
         self.scheduled_msg_list = []         # 定时消息任务列表
 
+        # ---------- 随机定时消息配置 ----------
+        self.random_msg_switch = False  # 随机定时消息总开关
+        self.random_msg_list   = []     # 随机定时消息任务列表
+
         # ---------- 定时朋友圈配置 ----------
         self.scheduled_moments_switch = False  # 定时朋友圈总开关
         self.scheduled_moments_list = []       # 定时朋友圈任务列表
@@ -238,6 +242,10 @@ class WXBotConfig:
                     "new_friend_switch": False,
                     "new_friend_reply_switch": False,
                     "new_friend_msg": [],
+                    "new_friend_check_min": 60,
+                    "new_friend_check_max": 300,
+                    "new_friend_remark_prefix": "",
+                    "new_friend_remark_suffix": "_机器人备注",
                     "chat_keyword_switch": False,
                     "group_keyword_switch": False,
                     "group_keyword_at_only": False,
@@ -250,6 +258,8 @@ class WXBotConfig:
                     "group_prompt_map": {},
                     "scheduled_msg_switch": False,
                     "scheduled_msg_list": [],
+                    "random_msg_switch": False,
+                    "random_msg_list": [],
                     "scheduled_moments_switch": False,
                     "scheduled_moments_list": [],
                     "moments_like_switch": False,
@@ -411,6 +421,10 @@ class WXBotConfig:
         self.new_frined_switch       = self.config.get('new_friend_switch')
         self.new_frien_reply_switch  = self.config.get('new_friend_reply_switch', False)
         self.new_frien_msg           = self.config.get('new_friend_msg', [])
+        self.new_friend_check_min    = max(60, int(self.config.get('new_friend_check_min', 60)))
+        self.new_friend_check_max    = min(3600, max(self.new_friend_check_min, int(self.config.get('new_friend_check_max', 300))))
+        self.new_friend_remark_prefix = self.config.get('new_friend_remark_prefix', '')
+        self.new_friend_remark_suffix = self.config.get('new_friend_remark_suffix', '_机器人备注')
 
         # 关键词配置
         self.chat_keyword_switch   = self.config.get('chat_keyword_switch')
@@ -422,6 +436,10 @@ class WXBotConfig:
         self.scheduled_msg_switch = self.config.get('scheduled_msg_switch',
                                                      self.config.get('everyday_msg_switch', False))
         self.scheduled_msg_list   = self.config.get('scheduled_msg_list', [])
+
+        # 随机定时消息配置
+        self.random_msg_switch = self.config.get('random_msg_switch', False)
+        self.random_msg_list   = self.config.get('random_msg_list', [])
 
         # 定时朋友圈配置
         self.scheduled_moments_switch = self.config.get('scheduled_moments_switch', False)
@@ -1287,7 +1305,7 @@ class DusAPI:
                 "x-api-key": self.api_key,
                 "anthropic-version": "2023-06-01",
                 "content-type": "application/json",
-                'user-agent': f'siver-dusapi/{version}'
+                'user-agent': f'siver-wxbot-panel/{version}'
             }
 
             if image_path or image_url:
@@ -1381,7 +1399,7 @@ class DusAPI:
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
                 "content-type": "application/json",
-                'user-agent': f'siver-dusapi/{version}'
+                'user-agent': f'siver-wxbot-panel/{version}'
             }
 
             input_items = []
@@ -1512,6 +1530,9 @@ class WXBot:
         self.wx                  = None         # WeChat 客户端对象（延迟初始化）
         self._moments_like_next_time  = None    # 下次随机朋友圈点赞的触发时间（datetime 或 None）
         self._random_moments_state    = {}     # 随机定时朋友圈运行状态缓存 {task_id: state_dict}
+        self._random_msg_state        = {}     # 随机定时消息运行状态缓存 {task_id: state_dict}
+        self._pause_chat_reply        = False  # 暂停私聊 AI 自动回复标志
+        self._pause_group_reply       = False  # 暂停群聊 AI 自动回复标志
         self.memory_manager      = None         # 记忆管理器（init_wx_listeners 时创建）
         self.all_Mode_listen_list = []           # 全局模式下的动态监听列表，元素格式：[昵称, 最新消息时间戳]
         self.start_time          = datetime.now()
@@ -2109,6 +2130,107 @@ class WXBot:
                 finally:
                     state['next_fire'] = None
 
+    def _check_random_msg(self):
+        """
+        随机定时消息调度检查。
+        在 main() 主循环中每轮调用，按任务配置决定今天是否发送、何时发送。
+
+        每周模式：每周初随机抽取 random_days_count 天（缓存一整周）。
+        每月模式：每月初随机抽取 random_days_count 天（缓存一整月）。
+        每日模式：每天必发。
+        确定今天发送后，在 [time_start, time_end] 窗口内随机选一个时刻触发。
+        """
+        now   = datetime.now()
+        today = now.date()
+
+        for task in self.config.random_msg_list:
+            if not task.get('enabled', True):
+                continue
+            task_id = task.get('id', '')
+            if not task_id:
+                continue
+
+            state = self._random_msg_state.setdefault(task_id, {
+                'next_fire':      None,
+                'last_fire_date': None,
+                'week_cache':     None,
+                'month_cache':    None,
+            })
+
+            repeat_type       = task.get('repeat_type', 'daily')
+            random_days_count = max(1, int(task.get('random_days_count', 1)))
+            is_eligible       = False
+
+            if repeat_type == 'daily':
+                is_eligible = True
+
+            elif repeat_type == 'weekly':
+                iso = today.isocalendar()
+                week_key = (iso[0], iso[1])
+                if state['week_cache'] is None or state['week_cache']['key'] != week_key:
+                    n        = min(random_days_count, 7)
+                    selected = sorted(random.sample(range(1, 8), n))
+                    state['week_cache'] = {'key': week_key, 'days': selected}
+                    log(message=f"随机定时消息 {task_id}：本周 {week_key} 随机发送日 {selected}")
+                is_eligible = today.isoweekday() in state['week_cache']['days']
+
+            elif repeat_type == 'monthly':
+                month_key = (today.year, today.month)
+                if state['month_cache'] is None or state['month_cache']['key'] != month_key:
+                    days_in_month = calendar.monthrange(today.year, today.month)[1]
+                    n        = min(random_days_count, days_in_month)
+                    selected = sorted(random.sample(range(1, days_in_month + 1), n))
+                    state['month_cache'] = {'key': month_key, 'days': selected}
+                    log(message=f"随机定时消息 {task_id}：本月 {month_key} 随机发送日 {selected}")
+                is_eligible = today.day in state['month_cache']['days']
+
+            if not is_eligible:
+                if state['next_fire'] is not None and state['next_fire'].date() == today:
+                    state['next_fire'] = None
+                continue
+
+            if state['last_fire_date'] == today:
+                continue
+
+            if state['next_fire'] is None:
+                time_start = task.get('time_start', '00:00')
+                time_end   = task.get('time_end',   '23:59')
+                try:
+                    h_s, m_s   = map(int, time_start.split(':'))
+                    h_e, m_e   = map(int, time_end.split(':'))
+                    start_mins = h_s * 60 + m_s
+                    end_mins   = h_e * 60 + m_e
+                    if start_mins >= end_mins:
+                        end_mins = start_mins + 1
+                    fire_mins  = random.randint(start_mins, end_mins)
+                    fire_h, fire_m = divmod(fire_mins, 60)
+                    fire_dt    = now.replace(hour=fire_h, minute=fire_m,
+                                            second=random.randint(0, 59), microsecond=0)
+                    if fire_dt <= now:
+                        fire_dt = now + timedelta(seconds=10)
+                    state['next_fire'] = fire_dt
+                    log(message=f"随机定时消息 {task_id}：今天计划于 {fire_dt.strftime('%H:%M:%S')} 发送")
+                except Exception as ex:
+                    log(level="ERROR", message=f"随机定时消息 {task_id} 时间解析失败：{ex}")
+                    continue
+
+            if now >= state['next_fire']:
+                log(message=f"随机定时消息 {task_id}：触发发送...")
+                try:
+                    self.send_scheduled_msg(
+                        targets     = task.get('targets', []),
+                        msgs        = task.get('msgs', []),
+                        repeat_type = 'daily',
+                        weekdays    = [],
+                        dates       = [],
+                        task_id     = '',
+                    )
+                    state['last_fire_date'] = today
+                except Exception as ex:
+                    log(level="ERROR", message=f"随机定时消息 {task_id} 发送失败：{ex}")
+                finally:
+                    state['next_fire'] = None
+
     # ----------------------------------------------------------
     # 消息回调与处理入口
     # ----------------------------------------------------------
@@ -2138,7 +2260,7 @@ class WXBot:
                     _img_enabled = self.config.group_image_recognition_switch
                 elif not self.config.AllListen_switch and chat.who in self.config.listen_list: # 白名单
                     _img_enabled = self.config.chat_image_recognition_switch
-                elif (self.config.AllListen_switch and chat.who not in self.config.listen_list and chat.chat_type == 'friend'): # 全局黑名单且排除自定义转发监听来源的群聊
+                elif (self.config.AllListen_switch and chat.who not in self.config.listen_list and chat.chat_type != 'group'): # 全局黑名单且排除自定义转发监听来源的群聊
                     _img_enabled = self.config.chat_image_recognition_switch
                 else:
                     _img_enabled = False  # 纯自定义转发来源，跳过图片下载
@@ -2287,6 +2409,10 @@ class WXBot:
             
             if (self.config.AtMe in message.content and self.config.group_reply_at) \
                     or not self.config.group_reply_at:
+                # 群聊 AI 自动回复已暂停，继续接收消息但不回复
+                # log(level="DEBUG", message=f"[DEBUG] 群聊暂停标志：{self._pause_group_reply}，来源：{chat.who}")
+                if self._pause_group_reply:
+                    return result
                 # 去除消息中的 @ 标识后再传给 AI
                 content_without_at = re.sub(self.config.AtMe, "", message.content).strip()
                 log(message=f"群组 {chat.who} 消息：" + content_without_at)
@@ -2376,7 +2502,7 @@ class WXBot:
             return result
         # 全局模式：来源在黑名单中,或者不是私聊（纯自定义转发来源）,跳过 AI 回复
         if (self.config.AllListen_switch and chat.who in self.config.listen_list) or\
-            (self.config.AllListen_switch and chat.chat_type != 'friend'):
+            (self.config.AllListen_switch and chat.chat_type == 'group'):
             return result
         # 私聊AI接口回复
         result = self.wx_send_ai(chat, message)
@@ -2477,6 +2603,10 @@ class WXBot:
         :param message: 消息对象
         :return:        发送结果
         """
+        # 私聊 AI 自动回复已暂停（白名单/全局模式均适用），继续接收消息但不回复
+        # log(level="DEBUG", message=f"[DEBUG] 私聊暂停标志：{self._pause_chat_reply}，来源：{chat.who}")
+        if self._pause_chat_reply:
+            return True
         try:
             is_keyword = False
             # 私聊关键词优先匹配
@@ -2680,6 +2810,16 @@ class WXBot:
                 '[/回复延迟状态] 查看回复延迟配置\n'
                 '[/开启回复延迟] / [/关闭回复延迟]'
             )
+        elif content == "/暂停恢复指令":
+            result = chat.SendMsg(
+                '--- 暂停/恢复自动回复 ---\n'
+                '[/自动回复状态] 查看当前暂停状态\n'
+                '[/暂停私聊自动回复] 暂停私聊 AI 回复（全局模式下同时停止收新消息）\n'
+                '[/恢复私聊自动回复] 恢复私聊 AI 回复\n'
+                '[/暂停群聊自动回复] 暂停群聊 AI 回复\n'
+                '[/恢复群聊自动回复] 恢复群聊 AI 回复\n'
+                '⚠️ 暂停期间机器人仍在运行，仅屏蔽 AI 自动回复，方便人工接管'
+            )
         elif content == "/图片识别指令":
             result = chat.SendMsg(
                 '--- 图片识别 ---\n'
@@ -2754,6 +2894,27 @@ class WXBot:
         elif content == "/关闭回复延迟":
             self.config.set_config('reply_delay_switch', False)
             result = chat.SendMsg("回复延迟已关闭")
+        # --- 暂停/恢复自动回复 ---
+        elif content == "/暂停私聊自动回复":
+            self._pause_chat_reply = True
+            result = chat.SendMsg("私聊自动回复已暂停，机器人继续接收消息但不会 AI 回复，发送 /恢复私聊自动回复 恢复")
+        elif content == "/恢复私聊自动回复":
+            self._pause_chat_reply = False
+            result = chat.SendMsg("私聊自动回复已恢复")
+        elif content == "/暂停群聊自动回复":
+            self._pause_group_reply = True
+            result = chat.SendMsg("群聊自动回复已暂停，机器人继续接收消息但不会 AI 回复，发送 /恢复群聊自动回复 恢复")
+        elif content == "/恢复群聊自动回复":
+            self._pause_group_reply = False
+            result = chat.SendMsg("群聊自动回复已恢复")
+        elif content == "/自动回复状态":
+            chat_st  = "⏸ 已暂停" if self._pause_chat_reply  else "▶ 运行中"
+            group_st = "⏸ 已暂停" if self._pause_group_reply else "▶ 运行中"
+            result = chat.SendMsg(
+                f"--- 自动回复状态 ---\n"
+                f"私聊自动回复：{chat_st}\n"
+                f"群聊自动回复：{group_st}"
+            )
         elif content.startswith("/接口测试"):
             message_re = message
             message_re.content = re.sub("/接口测试", "", message.content).strip()
@@ -3166,6 +3327,7 @@ class WXBot:
             '/关键词指令\n'
             '/记忆指令\n'
             '/延迟指令\n'
+            '/暂停恢复指令\n'
             '/图片识别指令\n'
             '/拆分回复指令\n'
             '/新好友指令\n'
@@ -3259,8 +3421,7 @@ class WXBot:
         if len(NewFriends) != 0:
             log(message="以下是新朋友：\n" + str(NewFriends))
             for new in NewFriends:
-                new_name = new.name + '_机器人备注'
-                # new_name = datetime.now().strftime('%Y%m%d%H%M%S') + '_机器人备注'
+                new_name = self.config.new_friend_remark_prefix + new.name + self.config.new_friend_remark_suffix
                 new.accept(remark=new_name)  # 接受好友请求并设置备注
                 log(message="已通过" + new_name + "的好友请求")
                 self.wx.SwitchToChat()       # 通过请求后切换回聊天页面
@@ -3437,11 +3598,14 @@ class WXBot:
             【当前启用】通过 GetNextNewMessage 获取新消息（V2 版本接口）。
             黑名单过滤后，仅处理 friend 类型的私聊消息。
             """
+            # 全局模式下私聊自动回复已暂停，直接跳过收消息
+            if self._pause_chat_reply:
+                return
             Next_callback_down_map = {}  # {msg.id: save_path}
             def Next_callback(msg):
                 nonlocal Next_callback_down_map
                 # 排除群聊再下载
-                if self.wx.chat_type == 'friend':
+                if self.wx.chat_type != 'group':
                     log(message=f'收到私聊消息：{msg.sender}: {msg.content}')
                     # Next回调即为私聊
                     _any_img_enabled = (self.config.chat_image_recognition_switch)
@@ -3495,7 +3659,7 @@ class WXBot:
                         if msg.id in Next_callback_down_map:
                             msg.content = str(Next_callback_down_map[msg.id])
                     # 仅处理 friend 类型的私聊消息，排除群聊
-                    if msg.attr == 'friend' and chat_type == 'friend':
+                    if msg.attr == 'friend' and chat_type != 'group':
                         # 全局模式首次消息：写入记忆（此处不经过 message_handle_callback）
                         if self.config.memory_switch and self.memory_manager:
                             try:
@@ -3592,6 +3756,8 @@ class WXBot:
             "reply_delay_switch":    self.config.reply_delay_switch,
             "reply_delay_min":       self.config.reply_delay_min,
             "reply_delay_max":       self.config.reply_delay_max,
+            "pause_chat_reply":      self._pause_chat_reply,
+            "pause_group_reply":     self._pause_group_reply,
         }
 
     def stop_wxbot(self):
@@ -3675,16 +3841,16 @@ class WXBot:
                             time.sleep(100)
                     check_counter = 0
 
-                # ---- 新好友检测模块（随机 30~300 次循环执行一次）----
+                # ---- 新好友检测模块（随机检查，间隔由配置决定）----
                 if self.config.new_frined_switch:
                     # 将秒数阈值除以循环周期得到循环次数（取整，最小1次）
-                    check_new_friend_time_MIN = max(1, int(30 / wait_time))
-                    check_new_friend_time_MAX = max(check_new_friend_time_MIN, int(300 / wait_time))
+                    check_new_friend_time_MIN = max(1, int(self.config.new_friend_check_min / wait_time))
+                    check_new_friend_time_MAX = max(check_new_friend_time_MIN, int(self.config.new_friend_check_max / wait_time))
                     check_new_counter += 1
                     if check_new_counter >= random.randint(check_new_friend_time_MIN, check_new_friend_time_MAX):
                         try:
                             self.Pass_New_Friends()
-                            log(message="检查新好友完成")
+                            # log(message="检查新好友完成")
                         except Exception as e:
                             self.is_err(self.wx.nickname + "  智能客服bot监听新好友出错！！请检查程序！！", e)
                         check_new_counter = 0
@@ -3709,6 +3875,15 @@ class WXBot:
                         log(level="ERROR", message=f"随机定时朋友圈模块出错：{e}")
                 else:
                     self._random_moments_state = {}  # 开关关闭时清空缓存
+
+                # ---- 随机定时消息模块 ----
+                if self.config.random_msg_switch:
+                    try:
+                        self._check_random_msg()
+                    except Exception as e:
+                        log(level="ERROR", message=f"随机定时消息模块出错：{e}")
+                else:
+                    self._random_msg_state = {}  # 开关关闭时清空缓存
 
                 # ---- 随机朋友圈点赞模块 ----
                 if self.config.moments_like_switch:
